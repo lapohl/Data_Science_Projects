@@ -1,0 +1,451 @@
+---
+title: "DS 740 Midterm"
+author: "Lyndsey Pohl"
+date: "11/3/2019"
+output: html_document
+---
+```{r}
+#install.packages('dplyr')
+#install.packages('tree')
+#install.packages('randomForest')
+#install.packages('gbm')
+#install.packages('coda')
+#install.packages('MVN')
+#install.packages('heplots')
+#install.packages('glmulti')
+#install.packages('class')
+#install.packages("pROC")
+
+library(dplyr)
+library(tree)
+library(randomForest)
+library(gbm)
+library(coda)
+library(MVN)
+library(heplots)
+library(class)
+library(pROC)
+```
+
+```{r}
+setwd("/Users/Lyndsey/Documents/UWWork/DS740/L8/")
+ais = read.csv('ais.csv')
+summary(ais)
+sports=unique(ais$Sport)
+sports
+nrow(ais)
+#10 different categories with 12 predictors, 202 observations
+# do following groupings:
+#track = t_sprnt, t_400m, field; swim = swim, w_polo, basket = b_ball, netball
+#now 6 categories with 12 predictors, 202 observations
+
+ais_new <-
+  ais %>%
+  mutate(Sport = case_when(
+    Sport == 't_400m' | Sport == 'T-sprnt' | Sport == 'field' ~ 'track_field',
+    Sport == 'swim' | Sport == 'w_polo' ~ 'swim',
+    Sport == 'b_ball' | Sport == 'netball' ~ 'basket',
+    Sport == 'tennis' ~ 'tennis',
+    Sport == 'gym' ~ 'gym',
+    Sport == 'row' ~ 'row'
+  )) %>%
+    mutate(Sport = as.factor(Sport)) %>%
+    mutate(Sex = as.factor(Sex))
+
+#omit NA Sports since we are using Sport as response  
+ais_new=na.omit(ais_new)
+nrow(ais_new)
+summary(ais_new)
+#response is multi-categorical so method options are: KNN, decision trees, Discriminant analysis, and generalized penalized linear regression
+#use trees and Discriminant Analysis
+
+
+#split data into sports with balls and sports with no balls
+ais_ball <-
+  ais %>%
+  mutate(Sport = case_when(
+    Sport == 't_400m' | Sport == 'T-sprnt' | Sport == 'swim' | Sport == 'gym'| Sport == 'row'~ 0,
+    Sport == 'b_ball' | Sport == 'w_polo' | Sport == 'netball' | Sport == 'tennis'| Sport == 'field'~ 1
+   
+  )) %>%
+    mutate(Sport = as.factor(Sport)) %>%
+    mutate(Sex = as.factor(Sex))
+ais_ball=na.omit(ais_ball)
+summary(ais_ball)
+
+```
+
+
+```{r}
+#assumptions for ais_ball data
+boxplot(Bfat~Sport, data=ais_ball)
+boxplot(Ht~Sport, data=ais_ball)
+boxplot(Wt~Sport, data=ais_ball)
+boxplot(LBM~Sport, data=ais_ball)
+boxplot(RCC~Sport, data=ais_ball)
+boxplot(WCC~Sport, data=ais_ball)
+boxplot(Hc~Sport, data=ais_ball)
+boxplot(Hg~Sport, data=ais_ball)
+boxplot(Ferr~Sport, data=ais_ball)
+boxplot(BMI~Sport, data=ais_ball)
+boxplot(SSF~Sport, data=ais_ball)
+#some factors yield differences between the respone more than others:Bfat, Wt, WCC, Hc, Hg, BMI, and SSF
+#most distributions look fairly normal with few outliers
+```
+```{r}
+ais_ball_quant = subset(ais_ball, select = -c(Sex,Sport))
+cor(ais_ball_quant)
+abs(cor(ais_ball_quant))>.8
+#7 out of 78 pairs have correlations above 0.8, suggesting correlation not very high with this data set
+```
+```{r}
+xvar = subset(ais_ball, select = -c(Sport, Sex))
+
+s1 = xvar[ais_ball$Sport==0,]
+s2 = xvar[ais_ball$Sport==1,]
+
+
+mvn(s1, mvnTest=c('hz')) #mvn not met, very low p value
+mvn(s2, mvnTest=c('hz')) #mvn not met, very low p value
+
+#QDA assumptions not met
+
+boxM(xvar, ais_ball$Sport)
+#low p value, cannot assume same covariance matrices
+
+#LDA assumptions not met
+```
+
+Methods for ais_ball = decision trees and logistic regression
+
+
+```{r}
+##Trees for ais_ball data
+
+#prelim training data
+n=dim(ais_ball)[1]
+set.seed(7, sample.kind = "Rounding")
+trainindex_pre = sample(1:dim(ais_ball)[1],floor(.8*n),replace=F)
+m = n -length(trainindex_pre);m
+
+##Pruning
+tree1 = tree(Sport~.,data=ais_ball[trainindex_pre,])
+pred1 = predict(tree1,ais_ball[-trainindex_pre,],type = 'class')
+table(pred1,ais_ball$Sport[-trainindex_pre])
+cv_tree1 = sum(pred1!=ais_ball$Sport[-trainindex_pre])/m; cv_tree1
+plot(tree1)
+text(tree1, pretty = 0)
+
+tree1cv=cv.tree(tree1,FUN=prune.misclass)
+minleaves = tree1cv$size[which(tree1cv$dev==min(tree1cv$dev))]
+prunetree1=prune.misclass(tree1, best = minleaves)
+predprune_minleaves = predict(prunetree1,ais_ball[-trainindex_pre,],type = 'class')
+table(predprune_minleaves,ais_ball$Sport[-trainindex_pre])
+cv_minleaves = sum(predprune_minleaves!=ais_ball$Sport[-trainindex_pre])/m; cv_minleaves
+plot(prunetree1)
+text(prunetree1, pretty = 0)
+#again, model with ideal number of leaves is slightly worse than normal tree model, but both are bad
+```
+```{r}
+##Bagging
+set.seed(7, sample.kind = "Rounding")
+
+bag1 = randomForest(Sport~.,data=ais_ball,mtry=12,importance=T)
+bag1
+plot(bag1)
+legend('topright',colnames(bag1$err.rate),col=1:3,lty=1:3, legend = c(1:3))
+importance(bag1)
+varImpPlot(bag1)
+#OOB does level off so 500 trees should be OK
+#OOB is 32%, and really high error rates for all classes
+#SSF and Hg contribute to accuracy; SSF and WCC contribute to node purity
+```
+```{r}
+#random forest
+bag_rf = randomForest(Sport~.,data=ais_ball,mtry=4,importance=T)#try 4 
+bag_rf
+plot(bag_rf)
+legend('topright',colnames(bag_rf$err.rate),col=1:3,lty=1:3, legend = c(1:3))
+importance(bag_rf)
+varImpPlot(bag_rf)
+#no improvement in OOB: 32%; same factors important for accuracy and node purity, though slight shift
+```
+```{r}
+#boosting, showing that all factors are important
+boost1 = gbm(Sport~.,data=ais_ball[trainindex_pre,], distribution='bernoulli',n.trees = 5000, shrinkage = 0.001, interaction.depth = 4)
+boost1
+
+predboost1 = predict(boost1,ais_new[-trainindex_pre,],n.trees=5000,type = 'response'); predboost1
+table(predboost1,ais_new$Sport[-trainindex_pre])
+cv_boost1 = sum(predboost1!=ais_new$Sport[-trainindex_pre])/n; cv_boost1
+```
+```{r}
+##logistic regression for ais_ball
+log1 = glm(Sport~.,data=ais_ball, family = 'binomial')
+summary(log1)#RCC, WCC, Hc, and SSF important
+
+log1_best = glm(Sport~RCC+WCC+Hc+SSF,data=ais_ball, family = 'binomial')
+summary(log1_best)
+#method with only important terms is slightly better but not by much looking at AIC value
+```
+```{r warning=FALSE}
+
+#determining best value for k for KNN method
+n = dim(ais_ball)[1]
+xy.in = ais_ball
+train = sample(n,floor(.8*n), replace = F)
+    knn.in.train = xy.in[train,]
+    WCC.train = subset(knn.in.train, select = c(WCC))
+    WCC.train.std = scale(WCC.train)
+    SSF.train = subset(knn.in.train, select = c(SSF))
+    SSF.train.std = scale(SSF.train)
+    train.in.std = cbind(WCC.train.std, SSF.train.std)
+    
+    Response.train = subset(knn.in.train, select = c(Sport))
+    Response.train = Response.train[,1]
+    
+    knn.in.valid = xy.in[-train,]
+    WCC.valid = subset(knn.in.valid, select = c(WCC))
+    WCC.valid.std = scale(WCC.valid, center = attr(WCC.train.std, 'scaled:center'), scale=attr(WCC.train.std, 'scaled:scale'))
+    SSF.valid = subset(knn.in.valid, select = c(SSF))
+    SSF.valid.std = scale(SSF.valid, center = attr(SSF.train.std, 'scaled:center'), scale=attr(SSF.train.std, 'scaled:scale'))
+    valid.in.std = cbind(WCC.valid.std, SSF.valid.std)
+    
+k = 50
+cv = rep(NA,50)
+
+for (i in 1:k){
+  preds = knn(train.in.std, valid.in.std, Response.train, k =i  )
+  cv[i]= sum(ais_ball$Sport!=preds)/n
+  
+}
+cv
+plot(1:k,cv)
+```
+
+
+```{r warning=FALSE}
+###Double Cross Validation for Model Assessment
+##ais_ball
+
+m = 7 #number of models
+xy.out = ais_ball
+n.out = dim(xy.out)[1]
+
+k.out = 10 
+groups.out = c(rep(1:k.out,floor(n.out/k.out)),1:(n.out%%k.out))  
+set.seed(8, sample.kind = "Rounding")
+cvgroups.out = sample(groups.out,n.out)  
+
+allpredictedCV.out = rep(NA,n.out)
+
+
+for (j in 1:k.out)  {  
+  groupj.out = (cvgroups.out == j)
+
+  trainxy.out = xy.out[!groupj.out,]
+  testxy.out = xy.out[groupj.out,]
+
+  xy.in = trainxy.out 
+  n.in = dim(xy.in)[1]
+  ncv = 10
+  
+  if ((n.in%%ncv) == 0) {
+    groups.in= rep(1:ncv,floor(n.in/ncv))} else {
+      groups.in=c(rep(1:ncv,floor(n.in/ncv)),(1:(n.in%%ncv)))
+    }
+  
+  cvgroups.in = sample(groups.in,n.in)
+
+  allpredictedcv10 = matrix(,ncol=m,nrow=n.in)
+  
+  for (i in 1:ncv) {
+    newdata.in = xy.in[cvgroups.in==i,]
+    
+    fit1 <- tree(Sport~.,data=xy.in, subset = (cvgroups != i))
+    allpredictedcv10[cvgroups.in==i,1] = predict(fit1,newdata.in,type = 'class')
+    
+    fit1cv=cv.tree(fit1,FUN=prune.misclass)
+    minleaves = fit1cv$size[which(fit1cv$dev==min(fit1cv$dev))]
+    fit2=prune.misclass(fit1, best = minleaves[1])
+    allpredictedcv10[cvgroups.in==i,2] = predict(fit2,newdata.in,type = 'class')
+    
+    set.seed(7, sample.kind = "Rounding")
+    fit3 <- randomForest(Sport~.,data=xy.in,mtry=12,importance=T)
+    allpredictedcv10[cvgroups.in==i,3] = predict(fit3,newdata.in,type = 'class')
+    
+    fit4 <- randomForest(Sport~.,data=xy.in,mtry=4,importance=T)
+    allpredictedcv10[cvgroups.in==i,4] = predict(fit4,newdata.in,type = 'class')
+    
+    fit5 <- glm(Sport~.,data=xy.in, family = 'binomial')
+    preds= predict(fit5,newdata.in,type = 'response')
+    preds[preds<0.5]<-0
+    preds[preds>=0.5]<-1
+    allpredictedcv10[cvgroups.in==i,5] = preds
+    
+    fit6 <- glm(Sport~RCC+WCC+Hc+SSF,data=xy.in, family = 'binomial')
+    preds= predict(fit6,newdata.in,type = 'response')
+    preds[preds<0.5]<-0
+    preds[preds>=0.5]<-1
+    allpredictedcv10[cvgroups.in==i,6] = preds
+    
+    knn.in.train = xy.in[cvgroups.in != i,]
+    WCC.train = subset(knn.in.train, select = c(WCC))
+    WCC.train.std = scale(WCC.train)
+    SSF.train = subset(knn.in.train, select = c(SSF))
+    SSF.train.std = scale(SSF.train)
+    train.in.std = cbind(WCC.train.std, SSF.train.std)
+    
+    Response.train = subset(knn.in.train, select = c(Sport))
+    Response.train = Response.train[,1]
+    
+    knn.in.valid = xy.in[cvgroups.in==i,]
+    WCC.valid = subset(knn.in.valid, select = c(WCC))
+    WCC.valid.std = scale(WCC.valid, center = attr(WCC.train.std, 'scaled:center'), scale=attr(WCC.train.std, 'scaled:scale'))
+    SSF.valid = subset(knn.in.valid, select = c(SSF))
+    SSF.valid.std = scale(SSF.valid, center = attr(SSF.train.std, 'scaled:center'), scale=attr(SSF.train.std, 'scaled:scale'))
+    valid.in.std = cbind(WCC.valid.std, SSF.valid.std)
+    
+    allpredictedcv10[cvgroups.in==i,7] = knn(train.in.std, valid.in.std, Response.train, k =4  )
+    
+  }
+
+  allcv10 = rep(0,m)
+  for (g in 1:m) allcv10[g] = sum(xy.in$Sport != allpredictedcv10[,g])/n.in
+  bestmodels = (1:m)[allcv10 == min(allcv10)]
+
+  bestmodel = ifelse(length(bestmodels)==1,bestmodels,sample(bestmodels,1))
+  print(allcv10)
+  print(paste("Best model at outer loop",j,"is",bestmodel))
+
+  if (bestmodel == 1)  {
+    
+    fit1.train <- tree(Sport~.,data=trainxy.out)
+    predictvalid = predict(fit1.train, testxy.out, type ='class')
+
+  }
+  if (bestmodel == 2)  {
+    
+        
+    fit1.train <- tree(Sport~.,data=trainxy.out)
+    fit1cv.train <- cv.tree(fit1.train,FUN=prune.misclass)
+    minleaves.train = fit1cv.train$size[which(fit1cv.train$dev==min(fit1cv.train$dev))]
+    fit2.train <- prunetree1=prune.misclass(fit1.train, best = minleaves)
+    predictvalid = predict(fit2.train,testxy.out, type = 'class')
+    
+  }
+  if (bestmodel == 3)  {
+    
+    set.seed(7, sample.kind = "Rounding")
+    fit3.train <- randomForest(Sport~.,data=trainxy.out,mtry=12,importance=T)
+    predictvalid = predict(fit3.train,testxy.out,type = 'class')
+    
+  }
+  if (bestmodel == 4)  {
+    
+    fit4.train <- randomForest(Sport~.,data=trainxy.out,mtry=4,importance=T)
+    predictvalid = predict(fit4.train,testxy.out,type = 'class')
+    
+  }
+  if (bestmodel == 5)  {
+    
+    fit5.train <- glm(Sport~.,data=trainxy.out, family = 'binomial')
+    preds = predict(fit5.train,testxy.out,type = 'response')
+    preds[preds<0.5]<-0
+    preds[preds>=0.5]<-1
+    predictvalid = preds
+    
+
+  }
+  if (bestmodel == 6)  {
+    fit6.train <- glm(Sport~RCC+WCC+Hc+SSF,data=trainxy.out, family = 'binomial')
+    preds = predict(fit6.train,testxy.out,type = 'response')
+    preds[preds<0.5]<-0
+    preds[preds>=0.5]<-1
+    predictvalid = preds
+  }
+  
+  if (bestmodel == 7)  {
+    
+    WCC.train = subset(trainxy.out, select = c(WCC))
+    WCC.train.std = scale(WCC.train)
+    SSF.train = subset(trainxy.out, select = c(SSF))
+    SSF.train.std = scale(SSF.train)
+    train.in.std = cbind(WCC.train.std, SSF.train.std)
+    
+    Response.train = subset(trainxy.out, select = c(Sport))
+    Response.train = Response.train[,1]
+
+    WCC.valid = subset(testxy.out, select = c(WCC))
+    WCC.valid.std = scale(WCC.valid, center = attr(WCC.train.std, 'scaled:center'), scale=attr(WCC.train.std, 'scaled:scale'))
+    SSF.valid = subset(testxy.out, select = c(SSF))
+    SSF.valid.std = scale(SSF.valid, center = attr(SSF.train.std, 'scaled:center'), scale=attr(SSF.train.std, 'scaled:scale'))
+    valid.in.std = cbind(WCC.valid.std, SSF.valid.std)
+    
+    predictvalid = knn(train.in.std, valid.in.std, Response.train, k =4  )
+
+  }
+  
+  allpredictedCV.out[groupj.out] = predictvalid
+
+}
+
+
+table(ais_ball$Sport,allpredictedCV.out)
+CV10.out = sum(ais_ball$Sport!=allpredictedCV.out)/n.out
+p.out = 1-CV10.out; p.out  
+
+table(ais_ball$Sport)/n.out
+
+
+```
+
+```{r warning =FALSE}
+#final model fitting
+k = 10
+n=dim(ais_ball)[1]
+
+groups = c(rep(1:k,floor(n/k)))
+set.seed(8, sample.kind = "Rounding")
+cvgroups.out = sample(groups,n,replace=T)  
+
+predictedCV = matrix(,ncol=1,nrow=n)
+
+
+for (j in 1:k)  {  
+  data.in= ais_ball[cvgroups.out!=j,]
+  data.cv = ais_ball[cvgroups.out==j,]
+  final_model <- glm(Sport~.,data=data.in, family = 'binomial')
+  predictedCV[cvgroups.out==j] = predict(final_model,data=data.cv,type = 'response')
+}
+#predictedCV
+```
+```{r}
+library(pROC)
+
+t = seq(0,1,0.1)
+predstest = predictedCV
+
+for (i in t) {
+
+    predstest[predictedCV<i]<-0
+    predstest[predictedCV>=i]<-1
+    print(i)
+    myroc=roc(response=ais_ball$Sport,predictor=predstest);print(myroc)
+
+  
+}
+
+#threshold value of 0.4 results in larget area under curve
+```
+```{r}
+    predictedCV[predictedCV<0.4]<-0
+    predictedCV[predictedCV>=0.4]<-1
+    
+    CV = sum(ais_ball$Sport!=predictedCV)/n;1-CV
+myroc = roc(predictor = predictedCV,response = ais_ball$Sport)
+png('myroc.png')
+plot.roc(myroc)
+```
+
+

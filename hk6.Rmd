@@ -1,0 +1,91 @@
+---
+title: "hmwk6"
+author: "Lyndsey Pohl"
+date: "10/12/2019"
+output: html_document
+---
+
+```{r}
+#install.packages("smss")
+library(smss)
+
+data(crime2005)
+
+q1_fit <-lm(VI2~ME+PO,data=crime2005)
+plot(q1_fit, labels.id = crime2005$STATE)
+q1_fit
+```
+```{r}
+unweighted <- lm(VI2~ME+PO,data=crime2005)
+oldcoef = rep(0, length(unweighted$coef))
+newcoef = unweighted$coef
+iter = 0
+
+while (iter<100 & sum(abs(oldcoef - newcoef))>0.0001 ) {
+    w=ifelse(abs(unweighted$residuals)>1.345, 1.345/(abs(unweighted$residuals)), 1)
+    unweighted = lm(VI2~ME+PO,data=crime2005, weights=w)
+ 
+    iter = iter + 1
+    oldcoef = newcoef
+    newcoef = unweighted$coef 
+  
+}
+iter
+newcoef
+test1<-rlm(VI2~ME+PO,data=crime2005);test1
+```
+```{r}
+library(MASS)
+library(car)
+fit2<-rlm(VI2~ME+PO,data=crime2005,psi=psi.bisquare)
+plot(fit2$w, las=1, cex.axis=1.2, ylab='Weights')
+smallweights = which(fit2$w < .8)
+showLabels(1:dim(crime2005)[1], fit2$w,crime2005$STATE,method = smallweights)
+```
+
+
+```{r}
+elnino = read.csv("elnino.csv")
+elnino =na.omit(elnino)
+summary(elnino)
+
+View(elnino)
+
+```
+
+
+```{r}
+fit1<-lm(air.temp~zon.winds+mer.winds+humidity+s.s.temp,data=elnino)
+#png('Q10.png')
+plot(fit1$residuals~fit1$fitted.values)
+
+png('Q11_QQ.png')
+qqnorm(fit1$residuals)
+qqline(fit1$residuals)
+```
+```{r}
+install.packages('nlme')
+library(nlme)
+#modb<-gls
+
+```
+```{r}
+
+modb<-gls(air.temp~zon.winds+mer.winds+humidity+s.s.temp,data=elnino)
+elnino$residuals = modb$residuals
+elnino_b3 = elnino[elnino$buoy==3,]
+nrow(elnino_b3)
+plot(elnino_b3$residuals[-14], elnino_b3$residuals[-1])
+```
+```{r}
+modc<-gls(air.temp~zon.winds+mer.winds+humidity+s.s.temp,data=elnino,correlation = corAR1(form=~day|buoy) );modc
+modb
+AIC(fit1,modb,modc)
+0.8086711^2
+#getVarCov(modc)
+acf(modc$residuals, ci.type = "ma")
+```
+```{r}
+modd<-gls(air.temp~zon.winds+mer.winds+humidity+s.s.temp,data=elnino,correlation = corAR1(form=~day|buoy) );modd
+
+```

@@ -1,0 +1,159 @@
+---
+title: "Untitled"
+author: "Lyndsey Pohl"
+date: "9/18/2019"
+output: html_document
+---
+
+```{r}
+library(ISLR)
+data("Auto")
+View(Auto)
+```
+```{r}
+Auto$Domestic[which(Auto$origin==1)]=1
+Auto$Domestic[which(Auto$origin==2)]=0
+Auto$Domestic[which(Auto$origin==3)]=0
+Auto$Domestic=as.factor(Auto$Domestic)
+
+summary(Auto)
+
+```
+```{r}
+setwd("/Users/Lyndsey/Documents/UWWork/DS740/L4/")
+#png('Q2_L4.png')
+boxplot(mpg~Domestic, data=Auto)
+library(MASS)
+mod3 = lda(Domestic~mpg,data=Auto)
+newdata<-data.frame(mpg=Auto$mpg)
+pred3 = predict(mod3, newdata)$class
+table( Auto$Domestic,pred3)
+```
+```{r}
+#90/(90+57)
+#204/(41+204)
+boxplot(cylinders~Domestic,data=Auto)
+boxplot(displacement~Domestic,data=Auto)
+boxplot(horsepower~Domestic,data=Auto)
+boxplot(weight~Domestic,data=Auto)
+boxplot(acceleration~Domestic,data=Auto)
+boxplot(year~Domestic,data=Auto)
+data0 = Auto$displacement[which(Auto$Domestic==0)]; data0
+data1 = Auto$displacement[which(Auto$Domestic==1)]
+
+qqnorm(data0)
+#qqplot(data0)
+qqnorm(data1)
+#qqplot()
+
+hist(data0)
+hist(data1)
+
+library(pROC)
+#data = read.csv('Dividends.csv')
+myroc=roc(response=Auto$Domestic, predictor = Auto$displacement)
+#png('Q11_h4.png')
+plot.roc(myroc)
+#auc(myroc)
+
+```
+```{r}
+#install.packages("ggplot2")
+#library(ggplot2)
+install.packages("lattice")
+library(lattice)
+```
+```{r}
+#ggplot(Auto, aes(x = Auto$mpg, y = Auto$displacement, colour = Auto$origin)) 
+#  geom_point() 
+#  facet_wrap( ~ Auto$origin)
+png('q13_h4.png')
+xyplot(Auto$mpg~Auto$displacement, groups = Auto$origin, data=Auto,
+       auto.key = list(corner = c(.9, .98), text=c('American','European','Japanese')), cex = 1.,
+         xlab='Displacement',ylab='mpg')
+```
+```{r}
+fit1<-lda(origin~mpg+cylinders+displacement+horsepower+weight,data=Auto)
+fit1
+newdata=subset(Auto,select=c(mpg,cylinders,displacement,horsepower,weight))
+
+preds=predict(fit1,Auto)$class
+table(Auto$origin,preds)
+
+newdata2=data.frame(mpg=20,cylinders=8,displacement=320,horsepower=280,weight=3600)
+p=predict(fit1,newdata2);p
+
+fit2<-qda(origin~mpg+cylinders+displacement+horsepower+weight,data=Auto)
+preds=predict(fit2,newdata)$class
+table(Auto$origin,preds)
+p=predict(fit2,newdata2);p
+```
+```{r}
+k=3;p=5
+(k+p/2)*(p+1)
+
+k*(p+1)*(p/2+1)
+
+```
+```{r}
+mod1 = lda(origin~displacement,data=Auto)
+mod2=lda(origin~displacement+mpg,data=Auto)
+mod3=lda(origin~mpg+cylinders+displacement+horsepower+weight,data=Auto)
+mod4 = qda(origin~displacement,data=Auto)
+mod5=qda(origin~displacement+mpg,data=Auto)
+mod6=qda(origin~mpg+cylinders+displacement+horsepower+weight,data=Auto)
+#Models =list(mod1,mod2,mod3+mod4,mod5,mod6)
+
+#View(Auto)
+m = 10; n=392
+groups = c(rep(1:m,floor(n/m)),c(1:(n%%m)))  
+set.seed(4)
+cvgroups = sample(groups,n); table(cvgroups)
+preds1=factor(rep(NA,n),levels=c("1","2","3"))
+preds2=factor(rep(NA,n),levels=c("1","2","3"))
+preds3=factor(rep(NA,n),levels=c("1","2","3"))
+preds4=factor(rep(NA,n),levels=c("1","2","3"))
+preds5=factor(rep(NA,n),levels=c("1","2","3"))
+preds6=factor(rep(NA,n),levels=c("1","2","3"))
+for (i in 1:10){
+  fitlda1 = lda(origin~displacement,data=Auto, subset = (cvgroups!=i))
+  fitlda2 = lda(origin~displacement+mpg,data=Auto, subset = (cvgroups!=i))
+  fitlda3 = lda(origin~mpg+cylinders+displacement+horsepower+weight,data=Auto,subset = (cvgroups!=i))
+  fitqda4 = qda(origin~displacement,data=Auto,subset = (cvgroups!=i))
+  fitqda5 = qda(origin~displacement+mpg,data=Auto,subset = (cvgroups!=i))
+  fitqda6 = qda(origin~mpg+cylinders+displacement+horsepower+weight,data=Auto,subset = (cvgroups!=i))
+  preds2[cvgroups==i] = predict(fitlda2,Auto[cvgroups==i,])$class
+  preds1[cvgroups==i] = predict(fitlda1,Auto[cvgroups==i,])$class
+  preds3[cvgroups==i] = predict(fitlda3,Auto[cvgroups==i,])$class
+  preds4[cvgroups==i] = predict(fitqda4,Auto[cvgroups==i,])$class
+  preds5[cvgroups==i] = predict(fitqda5,Auto[cvgroups==i,])$class
+  preds6[cvgroups==i] = predict(fitqda6,Auto[cvgroups==i,])$class
+  
+}
+
+CVmodel1 = sum(preds1!= Auto$origin)/n; CVmodel1
+CVmodel2 = sum(preds2!= Auto$origin)/n; CVmodel2
+CVmodel3 = sum(preds3!= Auto$origin)/n; CVmodel3
+CVmodel4 = sum(preds4!= Auto$origin)/n; CVmodel4
+CVmodel5 = sum(preds5!= Auto$origin)/n; CVmodel5
+CVmodel6 = sum(preds6!= Auto$origin)/n; CVmodel6
+
+```
+```{r}
+
+library(coda)
+library(MVN)
+
+xvar = cbind(Auto$mpg,Auto$displacement,Auto$weight,Auto$cylinders,Auto$horsepower)
+
+org1 = xvar[Auto$origin==1,]
+org2 = xvar[Auto$origin==2,]
+org3 = xvar[Auto$origin==3,]
+
+mvn(org1, mvnTest=c('hz'))
+mvn(org2, mvnTest=c('hz'))
+mvn(org3, mvnTest=c('hz'))
+
+
+
+```

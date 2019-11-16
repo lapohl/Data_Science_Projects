@@ -1,0 +1,128 @@
+---
+title: "Untitled"
+author: "Lyndsey Pohl"
+date: "10/18/2019"
+output: html_document
+---
+
+```{r}
+setwd("/Users/Lyndsey/Documents/UWWork/DS740/L7/")
+library(ISLR)
+
+```
+```{r}
+
+set.seed(7, sample.kind = "Rounding")
+trainojindex = sample(1:dim(OJ)[1],800,replace=F)
+trainoj = OJ[trainojindex,]
+summary(OJ)
+```
+```{r}
+library(tree)
+set.seed(7, sample.kind = "Rounding")
+trainojindex = sample(1:dim(OJ)[1],800,replace=F)
+#tree1 = tree(Purchase~.,data=OJ[trainojindex,])
+tree1 = tree(Purchase~.,data=trainoj)
+#tree1
+#summary(tree1)
+png('Q4.png')
+plot(tree1)
+text(tree1, pretty = 0)
+
+predict1 = predict(tree1, OJ[-trainojindex,],type='class')
+table(predict1,OJ[-trainojindex,1])
+
+
+(18+21)/(18+21+147+84)
+tree1cv=cv.tree(tree1,FUN=prune.misclass)
+tree1cv$size[which(tree1cv$dev==min(tree1cv$dev))]
+
+
+prunetree1=prune.misclass(tree1, best = 5)
+predprune1 = predict(prunetree1,OJ[-trainojindex,],type = 'class')
+table(predprune1,OJ[-trainojindex,1])
+```
+```{r}
+#summary(Hitters)
+Hitters1 = na.omit(Hitters)
+Hitters1$logSal = log(Hitters1$Salary)
+Hitters1 = subset(Hitters1, select = -c(Salary))
+summary(Hitters1)
+```
+```{r}
+
+library(gbm)
+#boostcanc = gbm(Survival01~.,data=cancer, distribution = 'bernoulli', n.trees = 5000, shrinkage = 0.001, interaction.depth = 2)
+boost2 = gbm(logSal~., data=Hitters1, distribution = 'gaussian',n.trees = 5000, shrinkage = 0.001, interaction.depth = 4)
+boost2
+summary(boost2)
+```
+```{r}
+set.seed(7, sample.kind = "Rounding")
+
+n =nrow(Hitters1)
+k = 10
+groups = c(rep(1:k, floor(n/k)), 1:(n-floor(n/k)*k))
+cvgroups = sample(groups, n)
+boost.predict = rep(-1,n)
+glm.predict = rep(-1,n)
+
+for (i in 1:k){
+  groupi = (cvgroups == i) 
+  boost = gbm(logSal~.,data=Hitters1[!groupi,], distribution = 'gaussian', n.trees = 5000, shrinkage = 0.001, interaction.depth = 4)
+  boost.predict[groupi]= predict(boost, Hitters1[groupi,], n.trees=5000, type = 'response')
+  
+  linear = lm(logSal~.,data=Hitters1[!groupi,])
+  glm.predict[groupi] = predict(linear, Hitters1[groupi,], type = 'response')
+  
+}
+glm.predict
+boost.predict
+mse_boost = mean((Hitters1$logSal-boost.predict)^2); mse_boost
+mse_glm = mean((Hitters1$logSal-glm.predict)^2); mse_glm
+
+```
+```{r}
+#?Hitters
+hit = subset(Hitters, select = -c(League, Division,NewLeague))
+#summary(hit)
+length(abs(cor(hit)>0.8)==FALSE)/2
+#cor(cor(hit))
+dim(Hitters1)
+```
+```{r}
+library(randomForest)
+hitbag = randomForest(logSal~., data=Hitters1,mtry = 19, importance = T)
+hitbag
+summary(hitbag)
+lm=lm(logSal~.,data=Hitters1)
+summary(lm)
+plot(hitbag$rsq)
+hitbag$rsq[500]
+importance(hitbag)
+varImpPlot(hitbag)
+```
+```{r}
+set.seed(7, sample.kind = "Rounding")
+n =nrow(Hitters1)
+k = 10
+groups = c(rep(1:k, floor(n/k)), 1:(n-floor(n/k)*k))
+cvgroups = sample(groups, n)
+bagging.predict = rep(-1,n)
+rf.predict = rep(-1,n)
+
+for (i in 1:k){
+  groupi = (cvgroups == i) 
+  bagging = randomForest(logSal~., data=Hitters1[!groupi,],mtry = 19, importance = T)
+  bagging.predict[groupi]= predict(bagging, Hitters1[groupi,], n.trees=5000, type = 'response')
+  
+  rf = randomForest(logSal~., data=Hitters1[!groupi,],mtry = 6, importance = T)
+  rf.predict[groupi] = predict(rf, Hitters1[groupi,], type = 'response')
+  
+}
+bagging.predict
+rf.predict
+mse_bagging = mean((Hitters1$logSal-bagging.predict)^2); mse_bagging
+mse_rf = mean((Hitters1$logSal-rf.predict)^2); mse_rf
+
+```

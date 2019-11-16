@@ -1,0 +1,203 @@
+---
+title: "Untitled"
+author: "Lyndsey Pohl"
+date: "11/12/2019"
+output: html_document
+---
+
+```{r}
+
+#install.packages('ISLR')
+
+#install.packages('nnet')
+
+#install.packages('NeuralNetTools')
+
+library(ISLR)
+
+library(nnet)
+
+library(NeuralNetTools)
+
+ 
+
+```
+
+```{r}
+
+ojdata=OJ
+
+set.seed(10, sample.kind = "Rounding")
+
+fit1=nnet(Purchase ~ LoyalCH+SalePriceMM+PriceDiff, data=ojdata, size = 1)
+
+ 
+#png('Q2.png')
+plotnet(fit1)
+
+#summary(fit1)
+
+#head(OJ)
+
+#print(ojdata[1, c(10,11,13)])
+
+ 
+
+#fit1$fitted.values[1]
+
+#fit1$wts[6]
+
+zH1 = fit1$wts[1] + sum(fit1$wts[2:4] * ojdata[1, c(10,11,13)])
+
+#z1 =
+
+sig = 1/(1+exp(-zH1));sig
+
+ 
+
+predict1=rep(NA,dim(ojdata)[1])
+
+predict1[fit1$fitted.values>0.5]='MM'
+
+predict1[fit1$fitted.values<0.5]='CH'
+
+table(ojdata$Purchase,predict1)
+
+ 
+
+predict2=rep(NA,dim(ojdata)[1])
+
+predict2[fit1$fitted.values>0.9]='MM'
+
+predict2[fit1$fitted.values<0.1]='CH'
+
+table(ojdata$Purchase,predict2)
+lekprofile(fit1)
+```
+
+```{r}
+
+hitters1 = Hitters
+
+ 
+
+hitters1 = na.omit(hitters1,cols='Salary')
+
+#summary(hitters1)
+
+ 
+
+hitters1$League01[hitters1$League=='A']=0
+
+hitters1$League01[hitters1$League=='N']=1
+
+hitters1$Division01[hitters1$Division=='E']=0
+
+hitters1$Division01[hitters1$Division=='W']=1
+
+hitters1$NewLeague01[hitters1$NewLeague=='A']=0
+
+hitters1$NewLeague01[hitters1$NewLeague=='N']=1
+
+ 
+
+hittersub = subset(hitters1,select=-c(League,Division,NewLeague))
+
+ 
+
+set.seed(10, sample.kind = "Rounding")
+
+ 
+
+dr = seq(.1, 3, by = .1)
+
+ 
+
+n=dim(hittersub)[1]
+
+k=10
+
+groups = c(rep(1:k,floor(n/k)))
+
+squarederror = matrix( , nr = n, nc = length(dr) )
+
+conv = matrix(, nr = k, nc = length(dr) )
+
+cvgroups = sample(groups,n,replace=T)
+
+ 
+
+ 
+
+for (i in 1:k){
+
+ 
+
+  groupsi = (cvgroups == i)
+
+  hit.train = scale(hittersub[!groupsi,])
+
+  hit.valid = scale(hittersub[groupsi,],center=attr(hit.train,"scaled:center"),scale=attr(hit.train,"scaled:scale"))
+
+ 
+
+  for (j in 1:length(dr)){
+
+        fit = nnet(Salary ~ ., data=hit.train, size = 10,decay=dr[j], trace = F,maxit=1000,linout=T)
+
+ 
+
+        squarederror[groupsi, j] = (predict(fit, hit.valid)-hit.valid[,17])^2
+
+        conv[i, j] = fit$convergence
+
+  }
+
+}
+
+ 
+
+ 
+
+```
+
+```{r}
+
+mse=apply(squarederror,2,mean);mse
+
+plot(dr,mse)
+
+ garson(fit1)
+
+```
+```{r}
+
+set.seed(10, sample.kind = "Rounding")
+
+hit.all = scale(hittersub)
+
+fit = nnet(Salary ~ ., data=hit.all, size = 10,decay=1.0, trace = F,maxit=300,linout=T)
+
+
+
+```
+
+```{r}
+
+set.seed(10, sample.kind = "Rounding")
+
+hit.all = scale(hittersub)
+
+fit = nnet(Salary ~ ., data=hit.all, size = 10,decay=1.0, trace = T,maxit=300,linout=T)
+
+ 
+
+ 
+
+```
+```{r}
+ 
+summary(hittersub)
+c=cor(hittersub)
+c[abs(c)>0.75]
+```

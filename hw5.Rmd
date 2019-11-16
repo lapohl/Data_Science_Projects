@@ -1,0 +1,76 @@
+---
+title: "Untitled"
+author: "Lyndsey Pohl"
+date: "9/29/2019"
+output: html_document
+---
+
+
+```{r}
+setwd("/Users/Lyndsey/Documents/UWWork/DS740/L5/")
+trees = read.csv('Trees.csv')
+trees = subset(trees,select =-c(TreeLabel))
+fit1 = glm(Volume~.,data=trees)
+summary(fit1)
+
+
+```
+```{r}
+lambdalist = c((1:100)/100)
+y=trees$Volume
+x=model.matrix(Volume~.,data=trees)[,-1]
+lassofit=glmnet(x,y,alpha=1,lambda=lambdalist)
+coef(lassofit,s=0.1)
+```
+```{r}
+set.seed(5, sample.kind = 'Rounding')
+ncv=5
+n=nrow(trees)
+groups = c(rep(1:ncv,floor(n/ncv)),(1:(n-ncv*floor(n/ncv)))); cvgroups = sample(groups,n)
+cvlasso = cv.glmnet(x,y,lambda = lambdalist,alpha = 1,nfolds=ncv,foldid = cvgroups)
+min(cvlasso$cvm)
+order(cvlasso$cvm)[1]
+cvlasso$lambda[order(cvlasso$cvm)[1]]
+
+```
+```{r}
+library(ISLR)
+View(College)
+#hist(College$Enroll)
+College$log.Enroll = log(College$Enroll)
+College$log.Apps = log(College$Apps)
+College$log.Accept = log(College$Accept)
+College$log.F.Undergrad = log(College$F.Undergrad)
+College$log.P.Undergrad = log(College$P.Undergrad)
+#png("L5_Q13.png")
+#hist(College$log.Enroll)
+
+```
+```{r}
+csub = subset(College,select = -c(Private))
+test=cor(csub)
+#test
+test[abs(test)>.5]
+
+```
+```{r}
+tcollege = subset(College,select=-c(Enroll,Apps,Accept, F.Undergrad,P.Undergrad))
+lambdalist =1000:1/1000
+x = model.matrix(log.Enroll~.,data=tcollege)
+y=tcollege$log.Enroll
+fit1 = glmnet(x,y,alpha=1,lambda = lambdalist)
+coef(fit1,s=0.8)
+```
+```{r}
+groups = c(rep(1:10,77),(1:7))
+set.seed(5, sample.kind = "Rounding")
+cvgroups = sample(groups,777)
+cvnet = cv.glmnet(x,y,lambda = lambdalist,alpha = 0.75,nfolds=10,foldid = cvgroups)
+png('L5_Q22.png')
+plot(cvnet$lambda,cvnet$cvm)
+min(cvnet$cvm)
+lambdalist[order(cvnet$cvm)[1]]
+```
+```{r}
+ll=1000:1/1000;ll
+```
