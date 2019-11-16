@@ -1,0 +1,216 @@
+---
+title: "Assignment 9--R"
+author: "Lyndsey Pohl"
+date: "September 5, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load necessary libraries here.
+```{r}
+#install.packages("readr")
+#install.packages("dplyer")
+#install.packages("ggplot2")
+#install.packages("ggformula")
+
+```
+
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(ggformula)
+
+```
+
+## Problem 1:  Colleges and Universities
+
+In this problem, you will do further cleaning and analysis of the data from the 1995 US News and World Report on colleges and universities in the US.
+
+a. In the Python portion of homework 9, you created a modified version of the data set usnews.csv.  Read the modified data into R.  Check the first few values of each vector to ensure that they were read correctly.
+
+```{r}
+usnewsdata = read_csv('usnews_python_assignment9.csv')
+head(usnewsdata)
+
+```
+
+b. Examine the summary of each variable.  Identify any unrealistic values and set them to missing.
+
+- It may be helpful to use control flow or functions to help organize your work.
+```{r}
+summary(usnewsdata)
+```
+```{r}
+usnewsdata_lowMATHSATIQR = 
+  usnewsdata %>%
+  filter( `Interquartile Math SAT`<0)
+usnewsdata_lowMATHSATIQR
+usnewsdata$`Interquartile Math SAT`[usnewsdata$`Interquartile Math SAT` < 0] <-NA
+
+usnewsdata_highgradrate = 
+  usnewsdata %>%
+  filter( `Graduation rate`>100)
+usnewsdata_highgradrate
+usnewsdata$`Graduation rate`[usnewsdata$`Graduation rate` >100] <-NA
+
+usnewsdata_pctfacPhd = 
+  usnewsdata %>%
+  filter( `Pct of faculty with PhDs` >100)
+usnewsdata_pctfacPhd
+usnewsdata$`Pct of faculty with PhDs`[usnewsdata$`Pct of faculty with PhDs` >100] <-NA
+
+arrange(usnewsdata, desc(usnewsdata$`Student/faculty ratio`))
+
+```
+```{r}
+
+
+summary(usnewsdata)
+
+```
+
+**Write a sentence** describing what you did, naming the colleges or universities affected.  (For example, "Listed ages less than zero (ABC University, XYZ College) were converted to missing data.")
+
+Listed IQR Math SAT values less than 0 (Pembroke State University) as missing data; listed Graduation Rates over 100 (Cazenovia College) as missing data; listed Pct of faculty with PhDs over 100 (Sage Colleges, Texas A&M University at Galveston) as missing data.
+
+c. Find the mean percentages of alumni who donate, for each of private and public schools.
+```{r}
+alumnidonate_private = 
+  usnewsdata %>%
+  filter( `Public/Private` == 'Private') %>%
+  select(`Pct alumni who donate`)
+alumnidonate_private
+summary(alumnidonate_private)
+```
+```{r}
+alumnidonate_public = 
+  usnewsdata %>%
+  filter( `Public/Private` == 'Public') %>%
+  select(`Pct alumni who donate`)
+alumnidonate_public
+summary(alumnidonate_public)
+
+```
+
+d. Test whether there is evidence that a higher percentage of alumni from private schools donate to their schools, compared to alumni from public schools.
+
+- Hint:  In part c, we took the mean of this variable in each group.  What does this tell you about what type of hypothesis to use?
+
+```{r}
+t.test(alumnidonate_private$`Pct alumni who donate`,alumnidonate_public$`Pct alumni who donate`, alternative = "greater")
+```
+
+**State your conclusion** in context.
+
+The pvalue is less than 0.01, therefore we can reject the null hypothesis that the two means are equal. There is significant statistical evidence to support that the amount alumni donate at private schools is higher than the amount alumni donate at public schools.
+
+e. Use `write_csv()` or `write.csv()` to save your updated data set.
+
+- If you are using `write.csv()`, consult the R documentation to set the arguments for the function.  Your output file should not have row names or row numbers.
+- After you save the file, open it in Excel, Notepad++, or a program of your choice to verify that the version you saved contains the updates you made in part b.
+
+```{r}
+write_csv(usnewsdata, 'usnewsdata_R_assignment9.csv')
+
+```
+
+## Problem 2:  Current Population Survey
+
+The data set cps.csv contains data from the 1985 Current Population Survey.
+
+- Dataset:  "Wages from the Current Population Survey," http://www.macalester.edu/~kaplan/ism/, from Daniel Kaplan, *Statistical Modeling: A Fresh Approach.* Original source:  Berndt, ER.  *The Practice of Econometrics 1991.*  Addison-Wesley.
+
+- Metadata:  cps_metadata.pdf, from p. 418 of *Statistical Modeling: A Fresh Approach* by Daniel Kaplan.
+
+a. Read the data into R and plot wages versus education.
+```{r}
+cpsdata = read_csv('cps.csv')
+cpsdata
+cpsdata %>%
+  gf_point(wage ~ educ)
+
+
+```
+
+**Comment** on the appropriateness of linear regression.
+There is somewhat of a linear trend between wage and education, however it is not very strong. There are still many low wages at high education values, although the max wage per education level does increase with education.
+
+b. Perform the linear regression and examine the diagnostic plots.
+```{r}
+model = lm(cpsdata$wage ~ cpsdata$educ)
+model
+plot_numbers = 1:4
+layout(matrix(plot_numbers, ncol = 2, byrow=TRUE))
+plot(model, plot_numbers)
+
+```
+
+**Explain** why transforming the wages variable is a good idea in this case.
+
+A transformation of wages might be good here due to the residuals increasing from left to right in the Residuals vs. Fitted graph. Also, the residuals do not follow a normal distribution as they do not fall along the y=x line in the Q-Q plot.
+
+c. The variable `wage` has units of dollars/hour.  Create a new variable, `time`, equal to 1/`wage`.  (So `time` has units of hours/dollar, or the length of time a person must work to earn $1.00.)
+
+```{r}
+time = 1/cpsdata$wage
+
+
+```
+
+d. Plot time versus education.  
+```{r}
+gf_point(time ~ cpsdata$educ)
+```
+Comment on the appropriateness of linear regression.
+It seems there is less of a linear trend now than with the wage variable. There is a slight indirect relationship between the two variables, time slightly decreases with education.
+
+e. Perform the linear regression.
+```{r}
+model2 = lm(time ~ cpsdata$educ)
+model2
+
+
+```
+
+Based on these results, are you happy with your decision to pursue a master's degree?  **Explain.**
+The fit for this model is much better than the last. Transforming wage to time has helped improve the model. The slope of the model is -0.0099 meaning that for every 1 unit increase in education, there is a .0099 decrease in hours/dollars. This means that people with a higher education generally earn a higher wage.
+
+f. Examine the diagnostic plots.
+```{r}
+plot_numbers = 1:4
+layout(matrix(plot_numbers, ncol = 2, byrow=TRUE))
+plot(model2, plot_numbers)
+
+```
+
+**Which individuals** appear to be outliers on the residual vs. predicted plot?
+The points 216, 507, and 518 look to be outliers.
+
+Re-do the regression without those individuals.
+```{r}
+time[216] <- NA
+time[507] < - NA
+time[518] < - NA
+cpsdata$educ[216] <- NA
+cpsdata$educ[507] <- NA
+cpsdata$educ[518] <- NA
+
+model2 = lm(time ~ cpsdata$educ)
+model2
+
+plot_numbers = 1:4
+layout(matrix(plot_numbers, ncol = 2, byrow=TRUE))
+plot(model2, plot_numbers)
+
+
+```
+
+**Did excluding** the outliers change your conclusion?
+
+Excluding the outliers did not change my conclusion, however it did slightly affect the slope of the model (-0.0099 to -0.0095).
+
+- Submit your .Rmd file, your knitted .docx or .pdf (.pdf preferred), and your updated data set from problem 1e to GitHub.

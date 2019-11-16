@@ -1,0 +1,153 @@
+---
+title: "Assignment 11--R"
+author: "Lyndsey Pohl"
+date: ""
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Amazon Reviews
+In this problem, you will use R to do further analysis on the Amazon reviews data.  Where relevant, you are encouraged to use functions from `dplyr` and `ggformula`.
+
+Load necessary libraries here.
+```{r}
+library(dplyr)
+library(ggformula)
+
+```
+
+### Reading and cleaning the data
+a. In the Python assignment for homework 11, you created a `.csv` file with information about Amazon reviews.  Using what you learned about reading files efficiently, read this data set into R.
+
+```{r}
+food_data = read.csv('food_output.csv', sep = ',', nrows = 568460)
+
+```
+```{r}
+head(food_data)
+```
+
+b. Examine the helpful fraction column for unrealistic values.  (There should be more than 0 but fewer than 100 unrealistic values.  If this isn't what you got, double-check your Python code.)  
+
+- Set unrealistic values to missing.
+- Also set to missing the corresponding value of the total votes column.
+  - (Because you computed the helpful fraction from the columns "helpful votes" and "total votes," an unrealistic value of "helpful fraction" means that at least one of the other two values must be unrealistic.  Because we don't know which one, the safest course is to set them both to missing.)
+
+```{r}
+summary(food_data$Helpful.Fraction)
+which(food_data$Helpful.Fraction > 1)
+```
+```{r}
+food_data$X..People.Helpful[44737]
+food_data$X..People.Helpful[64422]
+
+food_data$Total.Reviews[44737]
+food_data$Total.Reviews[64422]
+```
+```{r}
+food_data$Total.Reviews[food_data$Helpful.Fraction > 1] <- NA
+food_data$X..People.Helpful[food_data$Helpful.Fraction > 1] <- NA
+
+food_data$Helpful.Fraction[food_data$Helpful.Fraction > 1] <- NA
+summary(food_data$Helpful.Fraction)
+```
+```{r}
+
+hist(food_data$Total.Reviews, ylim = c(0,50))
+
+```
+
+c. **Write 1-2 sentences** to document how many unrealistic values you found, what made them unrealistic, and the fact that you set those values to missing.
+
+To find unrealistic values, I found fractions that were greater than one, as this meant that more than the total number of readers thought the review was helpful. I also looked at the total number of votes to see if there were any obvious unrealistic values, however they all seemd reasonable given that there were around 100 reviews with greater than 300 votes. For the two values that had fractions greater than one, I set the total votes, # helpful votes, and fraction to NA.
+
+### Investigating helpful reviews
+
+d. Create a new variable that describes whether more than 50% of people who voted on a review considered it helpful.  We will call these helpful reviews.
+
+```{r}
+food_data <-
+  food_data %>%
+  mutate(HelpfulRev = case_when(
+    Helpful.Fraction > 0.5 ~ 1,
+    TRUE ~ 0
+  ))
+
+head(food_data)
+
+#helpful reviews = 1, non helpful = 0
+
+```
+
+e. In this question, you will investigate the question, "Are helpful reviews longer than unhelpful ones?"  Start by making appropriate graphical summaries to help you decide whether to transform the review length.  Then do a hypothesis test of whether the typical length of helpful reviews is longer than the typical length of unhelpful reviews.
+```{r}
+hist(food_data$Review.Length, ylim=c(0,10000))
+```
+The review length is skewed, will need to transform using log.
+
+```{r}
+t.test(log(food_data$Review.Length) ~ food_data$HelpfulRev, alternative = 'two.sided')
+
+```
+
+**State your conclusion** in context.
+
+Since the p-value is less than 0.01, there is statistical evidence to say that helpful reviews are longer than non-helpful reviews.
+
+### Relationship between reviews and votes
+
+In this part of the assignment, you will investigate whether there is a relationship between the number of reviews a product has and the number of times the reviews have been voted on (as helpful vs. unhelpful).
+
+- Intuitively, it seems that products that have been on Amazon longer may have more reviews, and may also have accumulated more votes on their reviews.  You will investigate whether this is supported by the data.
+
+f. For each product ID, find the maximum number of votes received by any of the product's reviews.  Also count the number of reviews for each product ID.
+```{r}
+
+food_data_filtered <-
+  food_data %>%
+  group_by(Product.ID) %>%
+  summarise(numrev = n(), totvotes = sum(Total.Reviews, na.rm=TRUE), maxvotes = max(Total.Reviews, na.rm=TRUE))
+
+food_data_filtered
+
+sum(food_data_filtered$numrev)
+
+nrow(food_data)
+
+sum(food_data_filtered$totvotes, na.rm=TRUE)
+sum(food_data$Total.Reviews, na.rm=TRUE)
+
+
+nrow(food_data_filtered)
+```
+
+Hints to help you check your work:  
+
+- The number of elements in each of the resulting tbls or vectors should equal the total number of unique product IDs.
+- The sum of the number of reviews for each product ID should equal the total number of reviews.
+
+g. Make a scatterplot of max number of votes as a function of number of reviews.
+```{r}
+
+food_data_filtered %>%
+  gf_point(maxvotes ~ numrev)
+
+```
+Is there a visible trend?  If so, **describe it.**
+
+There is no real visible trend in the scatterplot above. The data is mostly concentrated in the lower left corner, low max votes and low number of reviews.
+
+h. Histograms of the review counts and number of votes indicate that both variables are right-skewed.  (You can check this for yourself.)  So, a log scale might be helpful in investigating the relationship between them.  Modify your scatterplot to use log scales on both axes.
+```{r}
+food_data_filtered %>%
+  gf_point(log(maxvotes) ~ log(numrev)) 
+```
+
+Is there a visible trend?  If so, **describe it.**  Does this tell us anything about the relationship between max votes and number of reviews *without* the log scale?
+
+The data still seems to be concentrated in one area, on the log graph most of the data is located between 2-4 log(maxvotes) and 2-4 log(numrev). There is a slight linear trend in that log(maxvotes) does increase with log(numrev).
+
+The linear log-log relationship suggests that there might be power relationship between max votes and number of reviews, however this is probably a weak relationship given that the linear trend is weak on the log-log graph.

@@ -1,0 +1,145 @@
+---
+title: "DS710 Final"
+author: "Lyndsey Pohl"
+date: "4/14/2019"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+```{r}
+
+#install.packages("tidyr")
+```
+
+
+```{r}
+library(readr)
+library(dplyr)
+library(ggformula)
+library(tidyr)
+```
+
+```{r}
+longform_tweets = read.csv('longform_candtweets.csv')
+longform_tweets
+
+```
+
+
+
+```{r}
+topcands = 
+  longform_tweets %>%
+  mutate(TypeCand = case_when(
+    Candidate == 'Joe Biden' | Candidate == 'Elizabeth Warren' | Candidate == 'Bernie Sanders' | Candidate == 'Kamala Harris'|Candidate=='Pete Buttigieg'|Candidate=='Beto O\'Rourke' ~ 'Top' ,
+    TRUE ~ 'Bottom' 
+  ))
+
+box = ggplot(topcands, aes(x=Issue, y = Tweets)) +
+  geom_boxplot(aes(fill=TypeCand))+
+  theme(axis.text.x = element_text(angle = 90))+
+  ylab('Tweets per Candidate')+
+  labs(fill='Type of Candidate')
+box
+
+
+topcands.expanded <- topcands[rep(row.names(topcands), topcands$Tweets), 1:5]
+topcands.expanded
+```
+
+```{r}
+
+civil = 
+  topcands %>%
+  filter(Issue=='Civilrights')
+
+corp = 
+  topcands %>%
+  filter(Issue=='Corporation')
+
+Education = 
+  topcands %>%
+  filter(Issue=='Education')
+
+Environment = 
+  topcands %>%
+  filter(Issue=='Environment')
+
+Guns = 
+  topcands %>%
+  filter(Issue=='Guns')
+
+Healthcare = 
+  topcands %>%
+  filter(Issue=='Healthcare')
+
+Immigration = 
+  topcands %>%
+  filter(Issue=='Immigration')
+
+Jobs = 
+  topcands %>%
+  filter(Issue=='Jobs')
+
+Trump = 
+  topcands %>%
+  filter(Issue=='Trump')
+  
+
+```
+
+```{r}
+t.test(civil$Tweets ~ civil$TypeCand, alternative = 'two.sided')
+t.test(corp$Tweets ~ corp$TypeCand, alternative = 'two.sided')
+t.test(Education$Tweets ~ Education$TypeCand, alternative = 'two.sided')
+t.test(Environment$Tweets ~ Environment$TypeCand, alternative = 'two.sided')
+t.test(Guns$Tweets ~ Guns$TypeCand, alternative = 'two.sided')
+t.test(Healthcare$Tweets ~ Healthcare$TypeCand, alternative = 'two.sided')
+t.test(Immigration$Tweets ~ Immigration$TypeCand, alternative = 'two.sided')
+t.test(Jobs$Tweets ~ Jobs$TypeCand, alternative = 'two.sided')
+t.test(Trump$Tweets ~ Trump$TypeCand, alternative = 'two.sided')
+
+```
+```{r}
+toptottweets = sum(topcands$Tweets[topcands$TypeCand=='Top'])
+toptottweets
+
+topgroups =
+  topcands %>%
+  group_by(Issue) %>%
+  filter(TypeCand=='Top')%>%
+  summarise(sumTweets = sum(Tweets), propTweets=sumTweets/toptottweets)
+
+topgroups
+
+bottottweets = sum(topcands$Tweets[topcands$TypeCand=='Bottom'])
+bottottweets
+
+botgroups =
+  topcands %>%
+  group_by(Issue) %>%
+  filter(TypeCand=='Bottom')%>%
+  summarise(sumTweets = sum(Tweets), propTweets=sumTweets/bottottweets)
+
+botgroups
+```
+```{r}
+
+test =chisq.test(topcands.expanded$Issue, topcands.expanded$TypeCand)
+test
+test$expected
+
+```
+
+The p-value is less than 0.01 so we reject the null hypothesis and can say there is a relationship between issues tweeted about and type of candidate.
+
+
+```{r}
+
+gf_bar(~topcands.expanded$Issue, fill = ~topcands.expanded$TypeCand, topcands.expanded)+
+  theme(axis.text.x = element_text(angle = 90))+
+  xlab('Issue')+
+  ylab('Number of Tweets')+
+  labs(fill='Type of Candidate')
+```
