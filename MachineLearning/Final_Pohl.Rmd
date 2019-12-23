@@ -1,0 +1,473 @@
+---
+title: "Untitled"
+author: "Lyndsey Pohl"
+date: "12/3/2019"
+output: html_document
+---
+
+```{r} 
+#setwd("//na.corning.com/CVUD-CS$/UD19/pohlla/My Documents/UW/740/Final")
+#install.packages('dplyr')
+#install.packages('lubridate')
+#install.packages('mice')
+#install.packages('VIM')
+#install.packages('zoom')
+#install.packages('ggplot2')
+#install.packages('car')
+#install.packages('corrplot')
+#install.packages('tree')
+#install.packages('randomForest')
+#install.packages('leaps')
+#install.packages('gbm')
+library(gbm)
+library(leaps)
+library(tree)
+library(randomForest)
+library(corrplot)
+library(car)
+library(dplyr)
+library(lubridate)
+library(zoom)
+library(VIM)
+library(mice)
+library(ggplot2)
+
+data = read.csv("/Users/Lyndsey/Documents/UWWork/DS740/Final/train_expected.csv")
+data1 = subset(data, select = -c(JerseyNumber, Season, NflIdRusher,expectedYards, DisplayName))
+data1$Quarter = as.factor(data1$Quarter)
+data1$Down = as.factor(data1$Down)
+n = dim(data)[2]
+data2 <-
+  data1 %>%mutate(
+	Quarter = as.factor(Quarter),
+	Down = as.factor(Down),
+	WindDirection=case_when(
+		WindDirection == 'SW'|WindDirection =='SouthWest'|WindDirection =='SSW'|WindDirection =='Southwest'|WindDirection =='From NNE'|WindDirection =='South Southwest'| WindDirection =='W-SW'| WindDirection =='West-Southwest'| WindDirection =='WSW'~'SW',
+    WindDirection == 'S'|WindDirection =='South'|WindDirection =='s'~'S',
+   	WindDirection == 'SE'|WindDirection =='ESE'|WindDirection =='South Southeast'|WindDirection =='Southeast'|WindDirection =='From NNW'|WindDirection =='East Southeast'|WindDirection =='SSE'~'SE',
+    WindDirection == 'East'|WindDirection =='E'|WindDirection =='from W'|WindDirection =='From W'|WindDirection =='EAST'~'E',
+    WindDirection == 'NNE'|WindDirection =='NE'|WindDirection =='ENE'|WindDirection =='Northeast'|WindDirection =='From SW'|WindDirection =='NorthEast'|WindDirection =='From WSW'|WindDirection =='North East'|WindDirection =='N-NE'|WindDirection =='East North East'|WindDirection =='From SSW'~'NE',
+    WindDirection == 'North'|WindDirection =='N'|WindDirection =='From S'~'N',
+    WindDirection == 'Northwest'|WindDirection =='NW'|WindDirection =='NNW'|WindDirection =='WNW'|WindDirection =='W-NW'|WindDirection =='West Northwest'|WindDirection =='From SSE'|WindDirection =='From ESE'|WindDirection =='North/Northwest'~'NW',
+    WindDirection == 'W'|WindDirection =='West'~'W',
+		WindDirection == '0'~as.character(NA)),
+	WindSpeed_new=case_when(WindDirection == '13'|WindDirection=='1'|WindDirection=='8'~as.character(WindDirection),WindDirection == 'Calm'~as.character(NA),WindSpeed == '10-20' ~'15',WindSpeed == '10mph' ~'10',WindSpeed == '10MPH' ~'10',WindSpeed == '11-17' ~ '14',WindSpeed == '12-22' ~ '17',WindSpeed == '12mph' ~ '12',WindSpeed == '13 MPH' ~ '13',WindSpeed == '14-23' ~ '18.5',WindSpeed == '15 gusts up to 25' ~ '20',WindSpeed == '4 MPh' ~ '4',WindSpeed == '6 mph' ~ '6',WindSpeed == '7 MPH' ~ '7',TRUE ~ as.character(WindSpeed)),	WindSpeed_new = as.numeric(as.character(WindSpeed_new)),
+	WindDirection_new = case_when(WindSpeed == 'SSW'~'SW',WindSpeed == 'E'~'E',WindSpeed == 'SE'~'SE',WindSpeed =='Calm'~as.character(NA),TRUE ~ as.character(WindDirection)),WindDirection_new = as.factor(WindDirection_new),
+  
+
+	GameClock = period_to_seconds(hms(GameClock))/60,
+
+	PossessionTeam = as.character(PossessionTeam),
+
+	FieldPosition = as.character(FieldPosition),
+
+	EndZoneHalf = case_when(
+		PossessionTeam != FieldPosition ~ 1,
+		TRUE ~ 0),EndZoneHalf = as.factor(EndZoneHalf),
+
+	OffenseFormation = case_when(OffenseFormation == 'SHOTGUN'~'SHOTGUN',OffenseFormation == 'SINGLEBACK'~'SINGLEBACK',OffenseFormation == 'PISTOL'~'PISTOL',TRUE ~ 'Other'),OffenseFormation = as.factor(OffenseFormation),
+	
+	Position=case_when(Position=='RB'~'RB',Position=='FB'|Position=='HB'~'Back',Position=='WR'~'WR',Position=='QB'~'QB',TRUE~'Other'),Position=as.factor(Position),
+	
+  SeasonTime=case_when(Week>=1 & Week<=4~'1st',Week>4 & Week <9~'2nd',Week>=9 & Week <13~'3rd',Week>13~'4th'),SeasonTime = as.factor(SeasonTime),
+	
+	StadiumType=case_when(StadiumType=='Domed'|StadiumType=='Bowl'|StadiumType=='Heinz Field'|StadiumType=='Retractable Roof'|grepl('ou',StadiumType,ignore.case = TRUE)|grepl('open',StadiumType,ignore.case = TRUE)~ 'Outdoors',
+ StadiumType=='Dome'|grepl('in',StadiumType,ignore.case = TRUE)|grepl('close',StadiumType,ignore.case = TRUE)~'Indoors'),StadiumType=as.factor(StadiumType),
+	
+	Turf=case_when(Turf=='A-Turf Titan'|Turf=='Artifical'|Turf=='Artificial'|Turf=='DD GrassMaster'|Turf=='Field turf'|Turf=='FieldTurf'|Turf=='Field Turf'|Turf=='FieldTurf 360'|Turf=='FieldTurf360'|Turf=='SISGrass'|Turf=='Twenty-Four/Seven Turf'|Turf=='UBU Speed Series-S5-M'|Turf=='UBU Sports Speed S5-M'~'Artificial',
+    Turf == 'grass'|Turf=='Grass'|Turf=='Natural'|Turf=='natural grass'|Turf=='Natural grass'|Turf=='Natural Grass'|Turf=='Naturall Grass'~'Natural'), Turf = as.factor(Turf),
+	
+ GameWeather=case_when(
+    grepl('snow',GameWeather, ignore.case = TRUE)~'Snow',grepl('rain',GameWeather, ignore.case = TRUE)|grepl('shower',GameWeather, ignore.case = TRUE)~'Rain',grepl('cloud',GameWeather, ignore.case = TRUE)|grepl('cold',GameWeather, ignore.case = TRUE)|grepl('fair',GameWeather, ignore.case = TRUE)|grepl('overcast',GameWeather, ignore.case = TRUE)|grepl('haz',GameWeather, ignore.case = TRUE)~'Cloudy',grepl('sun', GameWeather, ignore.case = TRUE) |grepl('clear', GameWeather, ignore.case = TRUE)~'Sun',grepl('in', GameWeather, ignore.case = TRUE)|grepl('controlled', GameWeather, ignore.case = TRUE) ~'Indoors',TRUE~as.character(NA)), GameWeather =as.factor(GameWeather),
+
+	Response = case_when(Yards >= Distance ~ 1, TRUE ~ 0),Response = as.factor(Response))
+
+n = dim(data2)[1]
+data2$OffensePersonnel=as.character(data2$OffensePersonnel);data2$DefensePersonnel=as.character(data2$DefensePersonnel)
+data2$DfLB=NA; data2$DfDB=NA;data2$DfDL=NA;data2$OfRB=NA; data2$OfQB=NA;data2$OfTE=NA;data2$OfWR=NA;data2$OfOL=NA;
+for (i in 1:n){vector = unlist(strsplit(data2$OffensePersonnel[i]," "))
+  if (grepl('RB',data2$OffensePersonnel[i])){data2$OfRB[i]=vector[grep('RB',vector)-1]}
+  if (grepl('RB',data2$OffensePersonnel[i])==FALSE){data2$OfRB[i]=0}
+  if (grepl('QB',data2$OffensePersonnel[i])){data2$OfQB[i]=vector[grep('QB',vector)-1]}
+  if (grepl('QB',data2$OffensePersonnel[i])==FALSE){data2$OfQB[i]=1}
+  if (grepl('TE',data2$OffensePersonnel[i])){data2$OfTE[i]=vector[grep('TE',vector)-1]}
+  if (grepl('TE',data2$OffensePersonnel[i])==FALSE){data2$OfTE[i]=0}
+  if (grepl('WR',data2$OffensePersonnel[i])){data2$OfWR[i]=vector[grep('WR',vector)-1]}
+  if (grepl('WR',data2$OffensePersonnel[i])==FALSE){data2$OfWR[i]=0}
+  if (grepl('OL',data2$OffensePersonnel[i])){data2$OfOL[i]=vector[grep('OL',vector)-1]}
+  if (grepl('OL',data2$OffensePersonnel[i])==FALSE){data2$OfOL[i]=5}}
+
+for (i in 1:n){vector = unlist(strsplit(data2$DefensePersonnel[i]," "))
+  if (grepl('LB',data2$DefensePersonnel[i])){data2$DfLB[i]=vector[grep('LB',vector)-1]}
+  if (grepl('LB',data2$DefensePersonnel[i])==FALSE){data2$DfLB[i]=0}
+  if (grepl('DB',data2$DefensePersonnel[i])){data2$DfDB[i]=vector[grep('DB',vector)-1]}
+  if (grepl('DB',data2$DefensePersonnel[i])==FALSE){data2$DfDB[i]=0}
+  if (grepl('DL',data2$DefensePersonnel[i])){data2$DfDL[i]=vector[grep('DL',vector)-1]}
+  if (grepl('DL',data2$DefensePersonnel[i])==FALSE){data2$DfDL[i]=4}}
+
+data2$OfRB = as.numeric(as.character(data2$OfRB));data2$OfQB = as.numeric(as.character(data2$OfQB));data2$OfTE = as.numeric(as.character(data2$OfTE));data2$OfWR = as.numeric(as.character(data2$OfWR));data2$OfOL = as.numeric(as.character(data2$OfOL));data2$DfDL = as.numeric(as.character(data2$DfDL));data2$DfDB = as.numeric(as.character(data2$DfDB));data2$DfLB = as.numeric(as.character(data2$DfLB))
+
+data2<-
+  data2%>%
+  mutate(DfDB = case_when(DfDB ==3~'3',DfDB ==4~'4',DfDB ==5~'5',TRUE~'Other'),
+ DfDL = case_when(DfDL ==2~'2',DfDL==3~'3',DfDL==4~'4',TRUE ~'Other'),
+ DfLB = case_when(DfLB==2~'2', DfLB==3~'3',DfLB==4~'4',TRUE~'Other'),
+ OfWR = case_when(OfWR==1~'1',OfWR==2~'2',OfWR==3~'3',TRUE~'Other'))
+ 
+split= function(x){
+  x=as.character(x)
+  r=unlist(strsplit(x,'T|Z'))
+  period_to_seconds(hms(r[2]))}
+
+handt =as.numeric(lapply(data2$TimeHandoff,split));snapt=as.numeric(lapply(data2$TimeSnap,split));data2$TimeSH = handt-snapt
+data2$TimeSH[which(data2$TimeSH<0)]=median(data2$TimeSH) #getting rid of unreasonable outliers and setting to median value
+
+ft2in = function(x){
+  list=unlist(strsplit(x,'-'))
+  r=60*as.numeric(list[1])+as.numeric(list[2])}
+
+data2$PlayerHeight=as.character(data2$PlayerHeight);data2$PlayerHeightInch=lapply(data2$PlayerHeight, ft2in);data2$PlayerHeightInch = as.numeric(data2$PlayerHeightInch)
+
+age=function(x){
+  int=interval(mdy(x),mdy('01/01/2018'))
+  t=time_length(int,'year')
+  floor(as.numeric(t))}
+
+data2$Age = as.numeric(as.character(lapply(as.character(data2$PlayerBirthDate),age)))
+
+#The NA Stadium Types all came from 3 different home teams; 'JAX','LAC', and 'NYG'. JAX and LAC had other entries where the stadium type was not missing, and this value was used to replace the NA. NYG had no NA entries for stadium type so it was looked up manually; all three locations have outdoor stadiums.
+names = unique(data2$HomeTeamAbbr[is.na(data2$StadiumType)])
+for (name in names){data2$StadiumType[is.na(data2$StadiumType) & name==data2$HomeTeamAbbr]=rep('Outdoors',length(data2$StadiumType[is.na(data2$StadiumType) & name==data2$HomeTeamAbbr]))}
+
+data2$GameWeather[is.na(data2$GameWeather) & data2$StadiumType=='Indoors']='Indoors'
+
+data2$DfLB = as.factor(data2$DfLB);data2$DfDB = as.factor(data2$DfDB);data2$DfDL = as.factor(data2$DfDL);data2$OfOL = as.factor(data2$OfOL);data2$OfWR = as.factor(data2$OfWR);data2$OfQB = as.factor(data2$OfQB);data2$OfRB =as.factor(data2$OfRB);data2$OfTE = as.factor(data2$OfTE)
+
+#Variables with missing values are: Game Weather, Temperature, Wind Speed, and Wind Direction. I don't think wind speed and direction should have much of an effect so take those out (along with other factors with little effect or used for other calculations).
+data3 = subset(data2,select=-c(PossessionTeam,FieldPosition, WindSpeed, WindDirection, OffensePersonnel,DefensePersonnel, TimeHandoff,TimeSnap, Yards, PlayerHeight, PlayerBirthDate, PlayerCollegeName, HomeTeamAbbr, VisitorTeamAbbr,Stadium, Location,Position,Week,GameId, PlayId, NflId,WindSpeed_new,WindDirection_new));#summary(data3)
+
+data4 = na.omit(data3);#summary(data4)
+nrow(data3[data3$Response==1,])/nrow(data3[data3$Response==0,])
+nrow(data4[data4$Response==1,])/nrow(data4[data4$Response==0,])
+#ratios of 1:0 are the same before and after removing all observations with any NAs, so go with this set of data
+
+clean_data = data4; #summary(clean_data)
+```
+
+look at variable trends and relationships
+
+```{r warning=FALSE}
+#Quantitative variable investigation
+clean_data_quant = subset(clean_data,select = -c(Team,Down,OffenseFormation,PlayDirection,StadiumType,Turf,GameWeather,EndZoneHalf,SeasonTime,Quarter,Response,DefendersInTheBox,DfLB,DfDB,DfDL,OfOL,OfWR,OfRB,OfQB,OfTE))
+
+i=1
+while (i < dim(clean_data_quant)[2]+1){boxplot(clean_data_quant[,i]~clean_data$Response,ylab = colnames(clean_data_quant)[i]);i=i+1}
+#visible difference in distributions for: A, Distance 
+
+i=1
+while(i<dim(clean_data_quant)[2]+1){print(ggplot(clean_data_quant, aes(x=clean_data_quant[,i])) +geom_histogram(aes(color = clean_data$Response),fill = "white",position = "identity")+xlab(colnames(clean_data_quant)[i]));i=i+1}
+ 
+ #bimodal:Dir,
+ #right skew:A,Distance,HomeScoreBeforePlay,VisitorScoreBeforePlay,Age -> log transformation
+ #left skew:Yardline ->
+ #not normal:X,Orientation,Gameclock
+
+ 
+cor=cor(clean_data_quant)
+corrplot(cor)
+#corr between: S&Dis, Dir&Orientation,Home&vis Score before play, player height and weight
+#take out: S, Orientation, HomeScoreBeforePlay, playerheight
+
+pairs(~X+Y+A+Dis,data=clean_data,col=clean_data$Response)
+pairs(~Dir+YardLine+GameClock,data=clean_data,col=clean_data$Response)
+pairs(~VisitorScoreBeforePlay+PlayerWeight+Temperature,data=clean_data,col=clean_data$Response)
+pairs(~Humidity+TimeSH+Age,data=clean_data,col=clean_data$Response)
+#a lot of overlap between classes for all of the interactions looked at (just a few of the possible)
+
+clean_data2  = subset(clean_data, select = -c(S, Orientation, HomeScoreBeforePlay, PlayerHeightInch,Age,HomeScoreBeforePlay,A,Distance))
+clean_data2$A_log = log(10+clean_data$A)
+clean_data2$Distance_log = log(10+clean_data$Distance)
+clean_data2$HomeScore_log = log(10+clean_data$HomeScoreBeforePlay)
+clean_data2$Age_log = log(10+clean_data$Age)
+#factor added to prevent negative values
+
+ggplot(clean_data2, aes(x=clean_data2$A_log)) +geom_histogram(aes(color = clean_data$Response),fill = "white",position = "identity")+xlab('Log A')
+ggplot(clean_data2, aes(x=clean_data2$Distance_log)) +geom_histogram(aes(color = clean_data$Response),fill = "white",position = "identity")+xlab('Log Dist')
+ggplot(clean_data2, aes(x=clean_data2$HomeScore_log)) +geom_histogram(aes(color = clean_data$Response),fill = "white",position = "identity")+xlab('Log Home Score')
+ggplot(clean_data2, aes(x=clean_data2$Age_log)) +geom_histogram(aes(color = clean_data$Response),fill = "white",position = "identity")+xlab('Log Age')
+
+```
+```{r}
+logfitpre=glm(Response~.,data=clean_data2,family='binomial')
+#summary(logfitpre)
+pred_logft = predict(logfitpre,data=clean_data2,type = 'response')
+pred_logft[pred_logft<0.5]<-0
+pred_logft[pred_logft>=0.5]<-1
+#table(pred_logft,clean_data2$Response)
+cv_logft = sum(pred_logft!=clean_data2$Response)/dim(clean_data2)[1]; #cv_logft
+#MSE 0.1714
+#Significant variables:Dis, Yardline, Shotgun offense formation,Singleback offense formation, defenders in the box, Turf-Natural, Game Weather -Snow, Temperature, EndZoneHalf - 1, ofWR - 1 or 2, log(A), log(Distace), log(Age)
+
+vif(logfitpre)
+#all vif less than 10 for variables with 1 DF; higher DF variables had GVIF^(1/(2*Df)) similar to other variables and less than sqrt(10)
+```
+
+Fitting to logistic model
+```{r}
+#using only significant variables and changing factor variables to 0/1 for significant levels
+factor_cleandata = 
+  clean_data2 %>%
+  mutate(SSOf=case_when(OffenseFormation=='SHOTGUN'~'SHOTGUN',OffenseFormation=='SINGLEBACK'~'SINGLEBACK',TRUE~'Other'),SSOf = as.factor(SSOf),Snow = case_when(GameWeather=='Snow'~1,TRUE ~0),Snow = as.factor(Snow),WR12 = case_when(OfWR==1|OfWR==2~1,TRUE ~0),WR12=as.factor(WR12))
+
+logfit2=glm(Response~SSOf+Snow+WR12+YardLine+DefendersInTheBox+Turf+Temperature+EndZoneHalf+A_log+Distance_log+Age_log,data=factor_cleandata,family='binomial')
+#summary(logfit2)
+#Not as good as the full model, but a simpler model might be worth the small increase in AIC
+
+pred_bestlogft = predict(logfit2,data=clean_data2,type = 'response')
+pred_bestlogft[pred_bestlogft<0.5]<-0
+pred_bestlogft[pred_bestlogft>=0.5]<-1
+table(pred_bestlogft,clean_data2$Response)
+cv_bestlogft = sum(pred_bestlogft!=clean_data2$Response)/dim(clean_data2)[1]; #cv_bestlogft
+#MSE 0.1720, a little higher than full logistic model
+
+logfit3=glm(Response~OffenseFormation+GameWeather+OfWR+YardLine+DefendersInTheBox+Turf+Temperature+EndZoneHalf+A_log+Distance_log+Age_log,data=factor_cleandata,family='binomial')
+pred_bestlogft3 = predict(logfit3,data=clean_data2,type = 'response')
+pred_bestlogft3[pred_bestlogft3<0.5]<-0
+pred_bestlogft3[pred_bestlogft3>=0.5]<-1
+table(pred_bestlogft3,clean_data2$Response)
+cv_bestlogft3 = sum(pred_bestlogft3!=clean_data2$Response)/dim(clean_data2)[1]; #cv_bestlogft3
+#summary(logfit3)
+```
+
+Fitting to Decision Trees
+```{r}
+n=dim(clean_data2)[1]
+
+#Basic Decision Trees, no pruning
+tree_all = tree(Response~.,data=clean_data2)
+pred_all = predict(tree_all,data=clean_data2,type = 'class')
+table(pred_all,clean_data2$Response)
+cv_tree_all = sum(pred_all!=clean_data2$Response)/dim(clean_data2)[1]; cv_tree_all
+
+#Pruning
+tree_allcv=cv.tree(tree_all,FUN=prune.misclass)
+minleaves = tree_allcv$size[which(tree_allcv$dev==min(tree_allcv$dev))]
+prunetree=prune.misclass(tree_all, best = minleaves[1])
+pred_prune = predict(prunetree, data = clean_data2,type='class')
+print('Tree-all params, pruned')
+table(pred_prune,clean_data2$Response)
+cv_tree_pruneall = sum(pred_prune!=clean_data2$Response)/dim(clean_data2)[1]; #cv_tree_pruneall
+
+#Bagging
+set.seed(7, sample.kind = "Rounding")
+
+bagging_all = randomForest(Response~.,data=clean_data2,mtry=34, importance=T)
+predbag_all = predict(bagging_all,data=clean_data2,n.trees=500,type = 'response')
+table(predbag_all,clean_data2$Response)
+cv_bag_all = sum(predbag_all!=clean_data2$Response)/n; cv_bag_all
+#plot(bagging_all)
+#legend('topright',colnames(bagging_all$err.rate),col=1:3,lty=1:3, legend = c(1:3))
+#importance(bagging_all)
+#varImpPlot(bagging_all)
+#all curves level off way before 500 trees
+#Most important for accuracy:log(Distance), log(Age), X, Yardline
+#Most important for Node Purity:log(Distance), log(Age), GameClock, Y
+
+plot(prunetree)
+text(prunetree, pretty = 0)
+```
+
+
+Model Assessment
+```{r warning=FALSE}
+###Double Cross Validation for Model Assessment
+
+m = 5 #number of models
+xy.out = clean_data2
+n.out = dim(xy.out)[1]
+
+k.out = 10 
+groups.out = c(rep(1:k.out,floor(n.out/k.out)),1:(n.out%%k.out))  
+set.seed(88, sample.kind = "Rounding")
+cvgroups.out = sample(groups.out,n.out)  
+
+allpredictedCV.out = rep(NA,n.out)
+
+
+for (j in 1:k.out)  {  
+  groupj.out = (cvgroups.out == j)
+
+  trainxy.out = xy.out[!groupj.out,]
+  testxy.out = xy.out[groupj.out,]
+
+  xy.in = trainxy.out 
+  n.in = dim(xy.in)[1]
+  ncv = 10
+  
+  if ((n.in%%ncv) == 0) {
+    groups.in= rep(1:ncv,floor(n.in/ncv))} else {
+      groups.in=c(rep(1:ncv,floor(n.in/ncv)),(1:(n.in%%ncv)))
+    }
+  
+  cvgroups.in = sample(groups.in,n.in)
+
+  allpredictedcv10 = matrix(,ncol=m,nrow=n.in)
+  
+  for (i in 1:ncv) {
+    newdata.in = xy.in[cvgroups.in==i,]
+    
+    fit1 = glm(Response~.,data=xy.in, subset = (cvgroups.in != i),family = 'binomial')
+    pred_logft = predict(fit1,newdata.in,type = 'response')
+    pred_logft[pred_logft<0.5]<-0; pred_logft[pred_logft>=0.5]<-1
+    allpredictedcv10[cvgroups.in==i,1] = pred_logft
+    
+    fit2=glm(Response~OffenseFormation+GameWeather+OfWR+YardLine+DefendersInTheBox+Turf+Temperature+EndZoneHalf+A_log+Distance_log+Age_log,data=xy.in, subset = (cvgroups.in != i),family = 'binomial')
+    pred_logft = predict(fit2,newdata.in,type = 'response')
+    pred_logft[pred_logft<0.5]<-0; pred_logft[pred_logft>=0.5]<-1
+    allpredictedcv10[cvgroups.in==i,2] = pred_logft
+    
+    fit3= tree(Response~.,data=xy.in, subset = (cvgroups.in != i))
+    pred =predict(fit3,newdata.in,type = 'class')
+    pred[pred==1]<-0; pred[pred==2]<-1
+    allpredictedcv10[cvgroups.in==i,3] = pred
+    
+    fit4a =cv.tree(fit3,FUN=prune.misclass)
+    minleaves = fit4a$size[which(fit4a$dev==min(fit4a$dev))]
+    fit4=prune.misclass(fit3, best = minleaves[1])
+    pred = predict(fit4,newdata.in,type = 'class')
+    pred[pred==1]<-0; pred[pred==2]<-1
+    allpredictedcv10[cvgroups.in==i,4] = pred
+    
+    set.seed(7, sample.kind = "Rounding")
+    fit5 = randomForest(Response~.,data=xy.in, subset = (cvgroups.in != i),mtry=34, importance=T)
+    pred = predict(fit5,newdata.in,n.trees=5000,type = 'class')
+    pred[pred==1]<-0; pred[pred==2]<-1
+    allpredictedcv10[cvgroups.in==i,5] = pred
+
+  }
+
+  allcv10 = rep(0,m)
+  for (g in 1:m) allcv10[g] = sum(xy.in$Response != allpredictedcv10[,g])/n.in
+  bestmodels = (1:m)[allcv10 == min(allcv10)]
+
+  bestmodel = ifelse(length(bestmodels)==1,bestmodels,sample(bestmodels,1))
+  print(allcv10)
+  print(paste("Best model at outer loop",j,"is",bestmodel))
+
+  if (bestmodel == 1)  {
+    
+    fit1.train = glm(Response~.,data=trainxy.out,family = 'binomial')
+    pred_logft = predict(fit1.train,newdata.in,type = 'response')
+    pred_logft[pred_logft<0.5]<-0; pred_logft[pred_logft>=0.5]<-1
+    predictvalid= pred_logft
+
+  }
+  if (bestmodel == 2)  {
+    
+        
+    fit2.train = glm(Response~OffenseFormation+GameWeather+OfWR+YardLine+DefendersInTheBox+Turf+Temperature+EndZoneHalf+A_log+Distance_log+Age_log,data=trainxy.out,family = 'binomial')
+    pred_logft = predict(fit2.train,newdata.in,type = 'response')
+    pred_logft[pred_logft<0.5]<-0; pred_logft[pred_logft>=0.5]<-1
+    predictvalid= pred_logft
+    
+  }
+  if (bestmodel == 3)  {
+    fit3.train = tree(Response~.,data=trainxy.out, subset = (cvgroups != i))
+    allpredictedcv10[cvgroups.in==i,3] = predict(fit3.train,newdata.in,type = 'class')
+    set.seed(7, sample.kind = "Rounding")
+    fit3.train <- randomForest(Response~.,data=trainxy.out,mtry=12,importance=T)
+    pred = predict(fit3.train,testxy.out,type = 'class')
+    pred[pred==1]<-0; pred[pred==2]<-1
+    predictvalid = pred
+    
+  }
+  if (bestmodel == 4)  {
+    
+    fit4.train <- randomForest(Response~.,data=trainxy.out,mtry=4,importance=T)
+    pred = predict(fit4.train,testxy.out,type = 'class')
+    pred[pred==1]<-0; pred[pred==2]<-1
+    predictvalid = pred
+    
+  }
+  if (bestmodel == 5)  {
+    
+    set.seed(7, sample.kind = "Rounding")
+    fit5.train = randomForest(Response~.,data=trainxy.out,mtry=34, importance=T)
+    pred = predict(fit5.train,data=testxy.out,n.trees=5000,type = 'class')
+    pred[pred==1]<-0; pred[pred==2]<-1
+    predictvalid = pred}
+  
+  allpredictedCV.out[groupj.out] = predictvalid}
+
+
+table(clean_data2$Response,allpredictedCV.out)
+CV10.out = sum(clean_data2$Response!=allpredictedCV.out)/n.out
+p.out = 1-CV10.out; p.out  
+
+table(clean_data2$Response)/n.out
+```
+Model Selection
+```{r}
+k.out = 5
+xy.in=clean_data2
+groups.out = c(rep(1:k.out,floor(n/k.out)),1:(n%%k.out))  
+set.seed(88, sample.kind = "Rounding")
+cvgroups.out = sample(groups.out,n)  
+
+allpredictedcv10 = matrix(,ncol=5,nrow=n)
+
+for (j in 1:k.out)  {  
+  
+    newdata.in = xy.in[cvgroups.out == j,]
+    
+    fit1 = glm(Response~.,data=xy.in, subset = (cvgroups.out != j),family = 'binomial', na.action = na.exclude)
+    pred_logft = predict(fit1,newdata.in,type = 'response')
+    pred_logft[pred_logft<0.5]<-0; pred_logft[pred_logft>=0.5]<-1
+    allpredictedcv10[cvgroups.out==j,1] = pred_logft
+    
+    fit2=glm(Response~OffenseFormation+GameWeather+OfWR+YardLine+DefendersInTheBox+Turf+Temperature+EndZoneHalf+A_log+Distance_log+Age_log,data=xy.in, subset = (cvgroups.in != j),family = 'binomial', na.action = na.exclude)
+    pred_logft = predict(fit2,newdata.in,type = 'response')
+    pred_logft[pred_logft<0.5]<-0; pred_logft[pred_logft>=0.5]<-1
+    allpredictedcv10[cvgroups.out==j,2] = pred_logft
+    
+    fit3= tree(Response~.,data=xy.in, subset = (cvgroups.out != j), na.action = na.exclude)
+    pred = predict(fit3,newdata.in,type = 'class')
+    pred[pred==1]<-0; pred[pred==2]<-1
+    allpredictedcv10[cvgroups.out==j,3]= pred
+    
+    fit4a =cv.tree(fit3,FUN=prune.misclass)
+    minleaves = fit4a$size[which(fit4a$dev==min(fit4a$dev))]
+    fit4=prune.misclass(fit3, best = minleaves[1])
+    pred = predict(fit4,newdata.in,type = 'class')
+    #print(pred)
+    pred[pred==1]<-0; pred[pred==2]<-1
+    allpredictedcv10[cvgroups.out==j,4] = pred
+    
+    
+    set.seed(7, sample.kind = "Rounding")
+    fit5 = randomForest(Response~.,data=xy.in, subset = (cvgroups.out != j),mtry=34, importance=T, na.action = na.exclude)
+    pred = predict(fit5,newdata.in,n.trees=5000,type = 'class')
+    pred[pred==1]<-0; pred[pred==2]<-1
+    allpredictedcv10[cvgroups.out==j,5] = pred
+
+}
+
+
+
+```
+
+```{r}
+allcv5=rep(NA,5)
+for (g in 1:5) {allcv5[g] = sum(clean_data2$Response != allpredictedcv10[,g])/n}
+allcv5
+#plot(allcv5, ylab='MSE',xlab='Model')
+#summary(allpredictedcv10)
+```
+```{r}
+final_model = glm(Response~OffenseFormation+GameWeather+OfWR+YardLine+DefendersInTheBox+Turf+Temperature+EndZoneHalf+A_log+Distance_log+Age_log,data=clean_data2,family = 'binomial')
+
+summary(final_model)
+
+```
+
+
