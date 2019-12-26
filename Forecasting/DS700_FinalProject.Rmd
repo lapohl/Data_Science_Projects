@@ -1,0 +1,449 @@
+---
+title: "DS700_Final"
+author: "Lyndsey Pohl"
+date: "2/28/2019"
+output:
+  pdf_document: default
+  html_document: default
+---
+Part 1 Objective: gather number of all cardiovascular examinations for Abbeville, LA by month for Jan 2006 - Dec 2013.
+
+
+1. Abbeville, LA heart exams: 
+  - get rid of non numeric data
+  
+2. May 2007 tabs:
+  - filter out Abbeville, LA and cardiovascular data
+  - combine
+  
+3. December 2013 tab:
+  - filter out Abbeville, LA and cardiovascular data
+  
+4. Combine all data: exams, month, year
+  - sort
+  - impute missing values
+
+
+
+```{r}
+#install packages
+#install.packages("readr")
+#install.packages("dplyer")
+#install.packages("stats")
+#install.packages("graphics")
+#install.packages("forecast")
+#install.packages("mice")
+#install.packages("tseries")
+#install.packages("ggformula")
+```
+
+```{r}
+#libraries
+library(readr)
+library(dplyr)
+library(stats)
+library(graphics)
+library(forecast)
+library(mice)
+library(tseries)
+library(ggformula)
+```
+
+```{r paged.print=TRUE}
+#read in all excel sheets
+abbevilleheart <- read.csv('AbbevilleHeart.txt', sep='\t')
+VioletMay2007 <- read.csv('VioletMay2007.txt', sep='\t')
+NOLAMay2007 <- read.csv('NewOrleansMay2007.txt', sep='\t')
+NOLAMay2013 <- read.csv('NewOrleansMay2013.txt', sep='\t')
+NOLAJune2013 <- read.csv('NewOrleansJune2013.txt', sep='\t')
+NOLAJuly2013 <- read.csv('NewOrleansJuly2013.txt', sep='\t')
+LafyMay2007 <- read.csv('LafayetteMay2007.txt', sep='\t')
+LafyMay2013 <- read.csv('LafayetteMay2013.txt', sep='\t')
+LafyJune2013 <- read.csv('LafayetteJune2013.txt', sep='\t')
+LafyJuly2013 <- read.csv('LafayetteJuly2013.txt', sep='\t')
+BatonRougeMay2007 <- read.csv('BatonRougeMay2007.txt', sep='\t')
+BatonRougeMay2013 <- read.csv('BatonRougeMay2013.txt', sep='\t')
+BatonRougeJune2013 <- read.csv('BatonRougeJune2013.txt', sep='\t')
+BatonRougeJuly2013 <- read.csv('BatonRougeJuly2013.txt', sep='\t')
+Dec2013 <- read.csv('Dec2013.txt', sep='\t')
+HeartCodes <- read.csv('HeartCode.txt', sep='\t')
+
+#abbevilleheart 
+#violet2007 
+#NOLA2007 
+#Lafy2007 
+#BatonRouge2007 
+#Dec2013 
+#HeartCodes 
+```
+
+1. Getting rid of non numeric data and 999999999 values in Abbeville, LA data; values over 100,000 seem unreasonable
+```{r}
+#sum(is.na(as.numeric(as.character(abbevilleheart$Incoming.Examinations))))
+abbevilleheart$Incoming.Examinations = as.numeric(as.character(abbevilleheart$Incoming.Examinations))
+                                                  
+abbevilleheart$Incoming.Examinations[is.na(abbevilleheart$Incoming.Examinations)] = NA
+
+abbevilleheart$Incoming.Examinations[abbevilleheart$Incoming.Examinations >100000] = NA
+
+abbevilleheart$Incoming.Examinations
+#abbevilleheart
+
+```
+
+2. Getting number of heart exams from Abbeville from May 2007
+```{r}
+#can use column names since all sheets have same labels
+FindNAbbeHeartExams <- function(dataframe){
+  newdataframe <-
+    dataframe %>%
+    filter(Original.Hospital.Location=="Abbeville") %>%
+    filter(Examination == "Cardiovascular" | Examination == "Cardiac"| Examination == "Heart"| Examination == "CAD"| Examination == "coronary Artery Disease (CAD)"| Examination == "Heart Palpitations"| Examination == "Ventricular Septal Defect (VSD)"| Examination == "VSD"|Examination == "Ischemic Heart Disease"| Examination == "Myocardial Infraction"| Examination == "Myocardial Ischemia"| Examination == "Cul Pulmunae"| Examination == "Myocarditis"| Examination == "Premature Ventricular Contraction"| Examination == "Aortic Valve Stenosis"| Examination == "Arrhythmia")
+  n = nrow(newdataframe)
+  u = length(unique(newdataframe$Request.ID))
+  results = list(n, u)
+  return(results)
+}
+  
+VioletMay2007AH = FindNAbbeHeartExams(VioletMay2007)
+LafyMay2007AH = FindNAbbeHeartExams(LafyMay2007)
+LafyMay2013AH = FindNAbbeHeartExams(LafyMay2013)
+LafyJune2013AH = FindNAbbeHeartExams(LafyJune2013)
+LafyJuly2013AH = FindNAbbeHeartExams(LafyJuly2013)
+BatonRougeMay2007AH = FindNAbbeHeartExams(BatonRougeMay2007)
+BatonRougeMay2013AH = FindNAbbeHeartExams(BatonRougeMay2013)
+BatonRougeJune2013AH = FindNAbbeHeartExams(BatonRougeJune2013)
+BatonRougeJuly2013AH = FindNAbbeHeartExams(BatonRougeJuly2013)
+NOLAMay2007AH = FindNAbbeHeartExams(NOLAMay2007)
+NOLAMay2013AH = FindNAbbeHeartExams(NOLAMay2013)
+NOLAJune2013AH = FindNAbbeHeartExams(NOLAJune2013)
+NOLAJuly2013AH = FindNAbbeHeartExams(NOLAJuly2013)
+
+
+RerouteMay2007tot = as.numeric(VioletMay2007AH[2])+as.numeric(LafyMay2007AH[2])+as.numeric(BatonRougeMay2007AH[2])+as.numeric(NOLAMay2007AH[2])
+
+RerouteMay2013tot = as.numeric(LafyMay2013AH[2])+as.numeric(BatonRougeMay2013AH[2])+as.numeric(NOLAMay2013AH[2])
+
+RerouteJune2013tot = as.numeric(LafyJune2013AH[2])+as.numeric(BatonRougeJune2013AH[2])+as.numeric(NOLAJune2013AH[2])
+
+RerouteJuly2013tot = as.numeric(LafyJuly2013AH[2])+as.numeric(BatonRougeJuly2013AH[2])+as.numeric(NOLAJuly2013AH[2])
+
+#getting number of duplicate values from each month
+dupvm07 = as.numeric(VioletMay2007AH[1])-as.numeric(VioletMay2007AH[2])
+dupvm07
+duplm07 = as.numeric(LafyMay2007AH[1])-as.numeric(LafyMay2007AH[2])
+duplm07
+duplm13 = as.numeric(LafyMay2013AH[1])-as.numeric(LafyMay2013AH[2])
+duplm13
+dupljn13 = as.numeric(LafyJune2013AH[1])-as.numeric(LafyJune2013AH[2])
+dupljn13
+duplj13 = as.numeric(LafyJuly2013AH[1])-as.numeric(LafyJuly2013AH[2])
+duplj13
+dupbrm07 = as.numeric(BatonRougeMay2007AH[1])-as.numeric(BatonRougeMay2007AH[2])
+dupbrm07
+dupbrm13 = as.numeric(BatonRougeMay2013AH[1])-as.numeric(BatonRougeMay2013AH[2])
+dupbrm13
+dupbrjn13 = as.numeric(BatonRougeJune2013AH[1])-as.numeric(BatonRougeJune2013AH[2])
+dupbrjn13
+dupbrj13 = as.numeric(BatonRougeJuly2013AH[1])-as.numeric(BatonRougeJuly2013AH[2])
+dupbrj13
+dupnom07 = as.numeric(NOLAMay2007AH[1])-as.numeric(NOLAMay2007AH[2])
+dupnom07
+dupnom13 = as.numeric(NOLAMay2013AH[1])-as.numeric(NOLAMay2013AH[2])
+dupnom13
+dupnojn13 = as.numeric(NOLAJune2013AH[1])-as.numeric(NOLAJune2013AH[2])
+dupnojn13
+dupnoj13 = as.numeric(NOLAJuly2013AH[1])-as.numeric(NOLAJuly2013AH[2])
+dupnoj13
+
+```
+The number of unique IDs rerouted to each HC from Abbeville was compared to the total number from Abbeville. If the numbers were different, this would be that there were duplicate values. There were duplicates found in all lists. The values added to the May 2007 total were only the number of unique values.
+
+3. Getting Abbeville heart data from December 2013 tab.
+
+```{r}
+FindAbbeD2013 <- function(dataframe){
+  newdataframe <-
+    dataframe %>%
+    filter(grepl("L839", Routing.SYSID, fixed = TRUE)) %>%
+    filter(grepl("TGU3", Routing.SYSID, fixed = TRUE) | grepl("ROV8", Routing.SYSID, fixed = TRUE)) 
+  
+  
+  return(newdataframe)
+}
+
+FindAbbeHeartD2013 <- function(dataframe){
+  HeartCode = 1 
+  tot = 0
+  while (HeartCode < (nrow(HeartCodes)+1)){
+    newdataframe <-
+      dataframe %>%
+      filter(grepl(HeartCodes[HeartCode,2], Routing.SYSID, fixed = TRUE))
+    n = nrow(newdataframe)
+    tot = n + tot
+    HeartCode = HeartCode + 1
+  }
+  
+  return(tot)
+}
+
+abdec = FindAbbeD2013(Dec2013)
+#abdec
+adheartdec = FindAbbeHeartD2013(abdec)
+adheartdec
+
+
+
+
+
+```
+4. Combine all data into exam #, month, year 
+
+first, sort initial Abbeville heart data
+```{r}
+abbevilleheartsorted <- abbevilleheart[order(abbevilleheart$Year, abbevilleheart$Month),]
+#abbevilleheartsorted
+
+abbevilleheartsorted$Incoming.Examinations[abbevilleheartsorted$Year==2007 & abbevilleheartsorted$Month==5] = abbevilleheartsorted$Incoming.Examinations[abbevilleheartsorted$Year==2007 & abbevilleheartsorted$Month==5] + RerouteMay2007tot
+
+abbevilleheartsorted$Incoming.Examinations[abbevilleheartsorted$Year==2013 & abbevilleheartsorted$Month==5] = abbevilleheartsorted$Incoming.Examinations[abbevilleheartsorted$Year==2013 & abbevilleheartsorted$Month==5] + RerouteMay2013tot
+
+abbevilleheartsorted$Incoming.Examinations[abbevilleheartsorted$Year==2013 & abbevilleheartsorted$Month==6] = abbevilleheartsorted$Incoming.Examinations[abbevilleheartsorted$Year==2013 & abbevilleheartsorted$Month==6] + RerouteJune2013tot
+
+abbevilleheartsorted$Incoming.Examinations[abbevilleheartsorted$Year==2013 & abbevilleheartsorted$Month==7] = abbevilleheartsorted$Incoming.Examinations[abbevilleheartsorted$Year==2013 & abbevilleheartsorted$Month==7] + RerouteJuly2013tot
+
+abbevilleheartsorted$Incoming.Examinations[abbevilleheartsorted$Year==2008 & abbevilleheartsorted$Month==10] <- NA
+
+abbevilleheartsorted$Incoming.Examinations[abbevilleheartsorted$Year==2013 & abbevilleheartsorted$Month==12] = adheartdec
+
+sum(is.na(abbevilleheartsorted$Incoming.Examinations))
+
+abbevilleheartsorted$Cumm.Month = seq(1,96, by =1)
+abbevilleheartsorted
+
+```
+There are still 11 values missing, need to understand where they are and impute values.
+
+Dataframe contains place for all months from 2006 to 2013.
+
+Using mice with linear regression to fit missing data
+
+```{r}
+
+imp <- mice(abbevilleheartsorted)
+fit <-with(imp, lm(abbevilleheartsorted$Incoming.Examinations~ abbevilleheartsorted$Cumm.Month))
+pooled <- pool(fit)
+summary(pooled)
+imp$imp$Incoming.Examinations
+fit
+
+```
+```{r}
+#all datasets gave same linear fit equation so they should all yield fairly similar results
+finaldata_lm = complete(imp, action=1)
+finaldata_lm
+
+```
+Using mice with arima to fit missing data
+```{r}
+imp <- mice(abbevilleheartsorted)
+fit <-with(imp, arima(abbevilleheartsorted$Incoming.Examinations))
+pooled <- pool(fit)
+summary(pooled)
+imp$imp$Incoming.Examinations
+fit
+
+```
+
+```{r}
+#all imputation sets have same aic value, so using any dataset should yield similar values
+finaldata_arima = complete(imp, action=1)
+finaldata_arima
+
+```
+Let's now compare the two final data sets that were built using mice with linear regression and arima.
+
+```{r}
+
+#gf_line(finaldata_arima$Incoming.Examinations ~ finaldata_arima$Cumm.Month, data = finaldata_arima)
+
+#gf_line(finaldata_lm$Incoming.Examinations ~ finaldata_lm$Cumm.Month, data = finaldata_lm)
+
+plot(finaldata_arima$Cumm.Month, finaldata_arima$Incoming.Examinations, type = 'l', col='red', xlab = 'Month', ylab = 'Incoming Examinations')
+lines(finaldata_lm$Cumm.Month, finaldata_lm$Incoming.Examinations, col = 'blue')
+legend(10, 5500,legend = c("MICE with Linear Regression" ,"MICE with Arima"), col = c('blue', 'red'), lty = 1 )
+
+```
+We can see in the above plot that the two lines are fairly similar except in one area, near month 50. The arima model imputed values that created a sharp decrease whereas the linear model did not. The arima model probably did this as it takes into account seasonality. Since there is some seasonality with the data, I decided to use the MICE with Arima data set.
+
+
+Building output file of final data to be used for forecasts
+```{r}
+
+write.table(finaldata_arima, 'HeartExamFinalData_FinalProject.csv', sep = ',', row.names = F, col.names = T)
+
+```
+
+build ARIMA forecast model
+```{r}
+datats = ts(finaldata_lm$Incoming.Examinations, start = c(2006,1), end = c(2013, 12), frequency = 12)
+plot(datats)
+diffarimats = diff(datats)
+plot(diffarimats)
+adf.test(diffarimats)
+Acf(diffarimats)
+pacf(diffarimats)
+
+
+
+```
+```{r}
+
+#The ACF trails to 0 after lag 1, the PACF trails to 0 after lag 1, and there was one diff so try (1,1,1).
+fitarima2 <- arima(datats, order = c(1,1,1))
+fitarima2
+```
+```{r}
+qqnorm (fitarima2$residuals)
+qqline(fitarima2$residuals)
+```
+```{r}
+Box.test(fitarima2$residuals, type="Ljung-Box")
+```
+```{r}
+forecast_arima2 =forecast(fitarima2, 12)
+forecast_arima2
+
+acc_arima2 =accuracy(fitarima2)
+acc_arima2
+```
+
+```{r}
+
+plot(forecast(fitarima2, 12), xlab = "year", ylab = "Incoming Exams")
+```
+
+```{r}
+
+
+fitarima <-auto.arima(datats)
+fitarima
+```
+```{r}
+qqnorm (fitarima$residuals)
+qqline(fitarima$residuals)
+```
+```{r}
+Box.test(fitarima$residuals, type="Ljung-Box")
+```
+
+```{r}
+forecast_arima =forecast(fitarima, 12)
+forecast_arima
+
+acc_arima =accuracy(fitarima)
+acc_arima
+```
+```{r}
+write.table(forecast_arima, 'forecast_arima_auto.csv',sep = ',', row.names = F, col.names = T)
+write.table(acc_arima, 'Accuracy_arima_auto.csv',sep = ',', row.names = F, col.names = T)
+```
+
+```{r}
+
+plot(forecast(fitarima, 12), xlab = "year", ylab = "Incoming Exams", ylim = c(0,8000))
+```
+Build forecast model using Holt Winters
+```{r}
+plot(finaldata_arima$Cumm.Month, log(finaldata_arima$Incoming.Examinations), type = 'l', col='red')
+```
+first try AAA model, since there is a little seasonality to the data. The log of the data is taken since the data follows a multiplicative trend with some seasonality.
+```{r}
+fithwaaa = ets((datats), model = "AAA")
+fithwaaa
+acc_hwaaa=accuracy(fithwaaa)
+acc_hwaaa
+```
+
+RMSE of Holt winters fit is already much lower than the arima model.
+
+```{r}
+pred_hwaaa = forecast(fithwaaa, 12)
+pred_hwaaa
+```
+```{r}
+
+
+plot(forecast(fithwaaa,12), ylim=c(0,8000), xlab = "year", ylab = "Incoming Exams")
+```
+
+
+
+```{r}
+write.table(pred_hwaaa, 'forecast_HW_AAA.csv', sep = ',', row.names = F, col.names = T)
+write.table(acc_hwaaa, 'accuracy_hw_AAA.csv',sep = ',', row.names = F, col.names = T)
+```
+
+Next try AAA with log transformation due to some multiplicative trend
+```{r}
+fithw2 = ets(log(datats), model = "AAA")
+fithw2
+acc_hw2=accuracy(fithw2)
+acc_hw2
+```
+```{r}
+pred_hw2 = forecast(fithw2, 12)
+pred_hw2
+```
+```{r}
+pred_hw2$mean = exp(pred_hw2$mean)
+pred_hw2$lower = exp(pred_hw2$lower)
+pred_hw2$upper = exp(pred_hw2$upper)
+pred_hw2exp = cbind(pred_hw2$mean, pred_hw2$lower, pred_hw2$upper)
+dimnames(pred_hw2exp)[[2]]= c("mean", " Lo 80", "Lo 95", "Hi 80", "Hi 95")
+pred_hw2exp
+```
+
+```{r}
+forecastx2 = seq(97, 108, by=1)
+plot(finaldata_lm$Cumm.Month, finaldata_lm$Incoming.Examinations, type = 'l', col='black', xlim = c(0,120), ylim = c(0,13000))
+lines(forecastx2, pred_hw2$mean, col = 'blue')
+lines(forecastx2, pred_hw2$lower[,1], col='orange')
+lines(forecastx2, pred_hw2$lower[,2], col='red')
+lines(forecastx2, pred_hw2$upper[,1], col='orange')
+lines(forecastx2, pred_hw2$upper[,2], col='red')
+
+```
+```{r}
+fithw3 = ets((datats))
+fithw3
+acc_hw3=accuracy(fithw2)
+acc_hw3
+```
+```{r}
+pred_hw3 = forecast(fithw2, 12)
+pred_hw3
+```
+```{r}
+plot(forecast(fithw2,12))
+
+```
+```{r}
+forecastx3 = seq(97, 108, by=1)
+plot(finaldata_lm$Cumm.Month, finaldata_lm$Incoming.Examinations, type = 'l', col='black', xlim = c(0,120), ylim = c(0,13000))
+lines(forecastx3, pred_hw3$mean, col = 'blue')
+lines(forecastx3, pred_hw3$lower[,1], col='orange')
+lines(forecastx3, pred_hw3$lower[,2], col='red')
+lines(forecastx3, pred_hw3$upper[,1], col='orange')
+lines(forecastx3, pred_hw3$upper[,2], col='red')
+
+```
+
+```{r}
+plot(finaldata_lm$Cumm.Month, finaldata_lm$Incoming.Examinations, type = 'l', col='black', xlim = c(0,120), ylim = c(0,8000), xlab = "month", ylab = "Incoming Exams")
+lines(forecastx2, pred_hwaaa$mean, col = 'blue')
+lines(forecastx2, forecast_arima$mean, col ='green')
+legend(10, 7000,legend = c("Arima(1,1,1) with Drift" ,"Holt-Winters 'A,A,A'"), col = c('green', 'blue'), lty = 1 )
+
+
+```
